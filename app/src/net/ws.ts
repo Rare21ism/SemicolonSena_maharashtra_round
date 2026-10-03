@@ -213,7 +213,7 @@ export class RoundtableClient {
       pcm,
     });
 
-    this.ws.send(frameBytes.buffer);
+    this.ws.send(frameBytes.buffer as ArrayBuffer);
   }
 
   /**

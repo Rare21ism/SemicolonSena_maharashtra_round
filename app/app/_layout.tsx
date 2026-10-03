@@ -3,14 +3,16 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "../src/state/SessionContext";
 import { colors } from "../src/theme";
 
 export default function RootLayout() {
   return (
-    <SessionProvider>
-      <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
-        <StatusBar style="light" />
+    <SafeAreaProvider>
+      <SessionProvider>
+        <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
+          <StatusBar style="light" />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.bgPrimary },
@@ -79,5 +81,6 @@ export default function RootLayout() {
         </Stack>
       </View>
     </SessionProvider>
+  </SafeAreaProvider>
   );
 }
