@@ -8,7 +8,7 @@ configurable hold-back (~300 ms jitter buffer). Missing frames are replaced with
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import Optional
 import numpy as np
@@ -19,6 +19,7 @@ SAMPLE_RATE = 16000
 TICK_DURATION_MS = 100.0
 SAMPLES_PER_TICK = 1600
 DEFAULT_HOLD_BACK_MS = 300.0
+DEFAULT_LOOKBACK_MS = 300.0
 
 
 @dataclass
@@ -28,12 +29,13 @@ class TickData:
     t_start_ms: float
     t_end_ms: float
     device_pcms: dict[int, np.ndarray]  # device_idx -> 1600 int16 samples
+    device_pre_rolls: dict[int, np.ndarray] = field(default_factory=dict)
 
 
 class SessionAligner:
     """
     Buffers audio frames from multiple devices, aligns them to a common session timeline,
-    and extracts synchronized 100 ms ticks with a jitter hold-back.
+    and extracts synchronized 100 ms ticks with a jitter hold-back and a 300 ms lookback per device.
     """
 
     def __init__(
@@ -41,14 +43,17 @@ class SessionAligner:
         sample_rate: int = SAMPLE_RATE,
         tick_duration_ms: float = TICK_DURATION_MS,
         hold_back_ms: float = DEFAULT_HOLD_BACK_MS,
+        lookback_ms: float = DEFAULT_LOOKBACK_MS,
     ):
         self.sample_rate = sample_rate
         self.tick_duration_ms = tick_duration_ms
         self.hold_back_ms = hold_back_ms
+        self.lookback_ms = lookback_ms
 
         self.samples_per_ms = self.sample_rate / 1000.0
         self.samples_per_tick = int(round(self.tick_duration_ms * self.samples_per_ms))
         self.hold_back_samples = int(round(self.hold_back_ms * self.samples_per_ms))
+        self.lookback_samples = int(round(self.lookback_ms * self.samples_per_ms))
 
         self.session_start_ms: Optional[float] = None
         self.max_received_sample: int = 0
@@ -58,6 +63,8 @@ class SessionAligner:
         self.enrolled_devices: set[int] = set()
         # Per-device sample buffers indexed relative to self.next_tick_sample
         self._device_buffers: dict[int, np.ndarray] = {}
+        # Per-device lookback history buffers (up to lookback_samples)
+        self._lookback_buffers: dict[int, np.ndarray] = {}
 
     def enroll_device(self, device_idx: int) -> None:
         """Explicitly enrolls a device into the aligner."""
@@ -65,6 +72,8 @@ class SessionAligner:
             self.enrolled_devices.add(device_idx)
             if device_idx not in self._device_buffers:
                 self._device_buffers[device_idx] = np.zeros(0, dtype=np.int16)
+            if device_idx not in self._lookback_buffers:
+                self._lookback_buffers[device_idx] = np.zeros(0, dtype=np.int16)
 
     def add_frame(
         self,
@@ -170,12 +179,21 @@ class SessionAligner:
         return ready_ticks
 
     def _extract_single_tick(self) -> TickData:
-        """Extracts exactly one 100 ms tick across all enrolled devices."""
+        """Extracts exactly one 100 ms tick across all enrolled devices with 300 ms lookback."""
         t_start = self.session_start_ms + (self.next_tick_sample / self.samples_per_ms)
         t_end = t_start + self.tick_duration_ms
 
         device_pcms: dict[int, np.ndarray] = {}
+        device_pre_rolls: dict[int, np.ndarray] = {}
+
         for dev in self.enrolled_devices:
+            # Capture the lookback buffer BEFORE updating it with this tick's audio
+            cur_lb = self._lookback_buffers.get(dev)
+            if cur_lb is not None and len(cur_lb) > 0:
+                device_pre_rolls[dev] = cur_lb.copy()
+            else:
+                device_pre_rolls[dev] = np.zeros(0, dtype=np.int16)
+
             buf = self._device_buffers.get(dev)
             if buf is not None and len(buf) >= self.samples_per_tick:
                 pcm_tick = buf[: self.samples_per_tick].copy()
@@ -191,15 +209,29 @@ class SessionAligner:
 
             device_pcms[dev] = pcm_tick
 
+            # Update lookback buffer with extracted real audio
+            new_lb = np.concatenate([device_pre_rolls[dev], pcm_tick])
+            if len(new_lb) > self.lookback_samples:
+                new_lb = new_lb[-self.lookback_samples :]
+            self._lookback_buffers[dev] = new_lb
+
         tick = TickData(
             tick_idx=self.tick_counter,
             t_start_ms=t_start,
             t_end_ms=t_end,
             device_pcms=device_pcms,
+            device_pre_rolls=device_pre_rolls,
         )
         self.tick_counter += 1
         self.next_tick_sample += self.samples_per_tick
         return tick
+
+    def get_lookback(self, device_idx: int) -> np.ndarray:
+        """Returns the current buffered lookback for a device."""
+        buf = self._lookback_buffers.get(device_idx)
+        if buf is None or len(buf) == 0:
+            return np.zeros(0, dtype=np.int16)
+        return buf.copy()
 
     def reset(self) -> None:
         """Resets all buffers and timestamps."""
@@ -209,3 +241,5 @@ class SessionAligner:
         self.tick_counter = 0
         self.enrolled_devices.clear()
         self._device_buffers.clear()
+        self._lookback_buffers.clear()
+

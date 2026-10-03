@@ -25,9 +25,10 @@ alias web-dev := dev-web
 tunnel:
     npm.cmd --workspace=app run start -- --tunnel --go -c
 
-# Run full test suite (TypeScript protocol tests + Python backend tests)
+# Run full test suite (TypeScript protocol tests + React Native app tests + Python backend tests)
 test:
     npm.cmd --workspace=@roundtable/protocol test
+    npm.cmd --workspace=app test
     cd server; python -m uv run --extra dev pytest
 
 # Run integration test with simulated clients

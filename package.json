@@ -7,8 +7,9 @@
     "app"
   ],
   "scripts": {
-    "test": "npm run test:protocol && npm run test:server",
+    "test": "npm run test:protocol && npm run test:app && npm run test:server",
     "test:protocol": "npm --workspace=@roundtable/protocol test",
+    "test:app": "npm --workspace=app test",
     "test:server": "cd server && python -m uv run pytest",
     "dev-server": "cd server && python -m uv run uvicorn roundtable.main:app --host 0.0.0.0 --port 8000 --reload",
     "dev-app": "npm --workspace=app run start",
