@@ -6,14 +6,34 @@ import pytest
 from starlette.testclient import TestClient
 
 from roundtable.main import app
-from roundtable.sessions import SessionManager
+from roundtable.sessions import Session
 import numpy as np
 from roundtable.protocol import pack_audio_frame
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("ROUNDTABLE_PIPELINE", "mock")
     return TestClient(app)
+
+
+def test_real_pipeline_initialization_failure_does_not_fall_back(client, monkeypatch):
+    monkeypatch.setenv("ROUNDTABLE_PIPELINE", "real")
+    from roundtable.ml import pipeline as ml_pipeline
+
+    def fail_initialization():
+        raise RuntimeError("model load failed")
+
+    monkeypatch.setattr(ml_pipeline, "RealPipeline", fail_initialization)
+    response = client.post("/sessions")
+    assert response.status_code == 503
+    assert "no mock pipeline was started" in response.json()["detail"]
+
+
+def test_unknown_pipeline_mode_is_rejected(monkeypatch):
+    monkeypatch.setenv("ROUNDTABLE_PIPELINE", "typo")
+    with pytest.raises(ValueError, match="ROUNDTABLE_PIPELINE"):
+        Session("test-session", "TESTXX")
 
 
 def test_health_endpoint(client):

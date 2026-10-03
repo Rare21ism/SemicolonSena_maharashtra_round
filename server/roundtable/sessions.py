@@ -75,6 +75,10 @@ class DeviceSession:
         )
 
 
+class PipelineInitializationError(RuntimeError):
+    """Raised when the configured session pipeline cannot be created."""
+
+
 class Session:
     def __init__(self, session_id: str, code: str):
         self.session_id = session_id
@@ -87,8 +91,8 @@ class Session:
         self.audio_queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_FRAME_BACKLOG)
         self._pipeline_task: Optional[asyncio.Task] = None
 
-        # Instantiate pipeline according to ROUNDTABLE_PIPELINE
-        mode = os.getenv("ROUNDTABLE_PIPELINE", "mock").lower()
+        # Mock captions are only available when explicitly enabled for local tests.
+        mode = os.getenv("ROUNDTABLE_PIPELINE", "real").strip().lower()
         if mode == "real":
             try:
                 from roundtable.ml.pipeline import RealPipeline  # type: ignore
@@ -96,10 +100,15 @@ class Session:
                 self.pipeline: Pipeline = RealPipeline()
                 logger.info(f"Loaded RealPipeline for session {session_id}")
             except Exception as e:
-                logger.warning(f"Could not load RealPipeline: {e}. Falling back to MockPipeline.")
-                self.pipeline = MockPipeline(self.get_session_clock_ms)
-        else:
+                logger.exception("Could not initialize RealPipeline for session %s", session_id)
+                raise PipelineInitializationError(
+                    "Real ML pipeline failed to initialize. Install the server ML extras and model files; "
+                    "no mock pipeline was started."
+                ) from e
+        elif mode == "mock":
             self.pipeline = MockPipeline(self.get_session_clock_ms)
+        else:
+            raise ValueError("ROUNDTABLE_PIPELINE must be 'real' or explicitly 'mock'")
 
         self._broadcast_task: Optional[asyncio.Task] = None
         self._start_caption_listener()

@@ -7,21 +7,29 @@ FastAPI backend for multi-device audio streaming, synchronization, speaker attri
 Requires Python 3.11 or newer and `uv`.
 
 ```bash
-# Install the backend and development dependencies
-uv sync --dev
+# Install the backend, development, and optional ML dependencies, then fetch model files
+uv sync --extra dev --extra ml
+uv run python scripts/download_models.py
 
 # Run the server from the repository root
 just dev-server
 
-# Run the synthetic clients (server must be running)
+# In another terminal, run synthetic clients only against an explicitly mocked server
 just fake-clients 3
 ```
 
 REST endpoints are `/health`, `/health/details`, `POST /sessions`,
 `GET /sessions/{code}`, and `/health/session/{session_id}`. The WebSocket
 endpoint is `/ws/{session_id}` and accepts a session ID or six-letter code.
-The default pipeline is the mock pipeline; set `ROUNDTABLE_PIPELINE=mock` to
-select it explicitly. No real model is required for backend development.
+The default pipeline is `real`. Session creation returns an error if the real
+ML dependencies or model files are unavailable; it does not fall back to fake
+captions. For developer-only fake-client testing, explicitly set
+`ROUNDTABLE_PIPELINE=mock` before starting the server. On PowerShell:
+
+```powershell
+$env:ROUNDTABLE_PIPELINE = "mock"
+just dev-server
+```
 
 For phone testing, expose port 8000 with an HTTPS tunnel such as
 `ngrok http 8000` or `cloudflared tunnel --url http://localhost:8000`, then

@@ -14,7 +14,7 @@ from roundtable.protocol import (
     SessionCreateResponse,
     SessionQueryResponse,
 )
-from roundtable.sessions import session_manager
+from roundtable.sessions import PipelineInitializationError, session_manager
 from roundtable.ws import handle_websocket
 
 logging.basicConfig(
@@ -64,7 +64,10 @@ async def health_details():
 
 @app.post("/sessions", response_model=SessionCreateResponse)
 async def create_session():
-    session = await session_manager.create_session()
+    try:
+        session = await session_manager.create_session()
+    except PipelineInitializationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return SessionCreateResponse(session_id=session.session_id, code=session.code)
 
 
@@ -72,7 +75,7 @@ async def create_session():
 async def query_session(code: str):
     session = session_manager.get_session(code)
     if not session:
-        session = await session_manager.create_or_get_session(code)
+        raise HTTPException(status_code=404, detail="Session not found")
     return SessionQueryResponse(
         session_id=session.session_id,
         code=session.code,

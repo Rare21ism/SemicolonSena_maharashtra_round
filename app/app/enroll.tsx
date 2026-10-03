@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -15,46 +15,167 @@ import { Button } from "../src/components/Button";
 import { Input } from "../src/components/Input";
 import { AudioWaveform } from "../src/components/AudioWaveform";
 import { useSession } from "../src/state/SessionContext";
+import { createAudioSource } from "../src/audio";
+import { RoundtableClient } from "../src/net/ws";
 
 export default function VoiceEnrollmentScreen() {
   const router = useRouter();
-  const { name, setName, setVoiceEnrolled } = useSession();
+  const { name, setName, setVoiceEnrolled, sessionCode, serverUrl } = useSession();
 
   const [state, setState] = useState<
-    "idle" | "countdown" | "recording" | "captured" | "ready"
+    "idle" | "connecting" | "recording" | "captured" | "ready"
   >("idle");
   const [countdown, setCountdown] = useState<number>(5);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [capturedFrameCount, setCapturedFrameCount] = useState(0);
+  const [micLevel, setMicLevel] = useState(0);
+  const sourceRef = useRef<ReturnType<typeof createAudioSource> | null>(null);
+  const clientRef = useRef<RoundtableClient | null>(null);
+  const recordingRef = useRef(false);
+  const capturedAudioRef = useRef<Int16Array[] | null>(null);
+  const playbackRef = useRef<HTMLAudioElement | null>(null);
+  const playbackUrlRef = useRef<string | null>(null);
 
-  // 5-second voice enrollment recording timer
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    if (state === "recording") {
-      timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer!);
-            setState("captured");
-            setVoiceEnrolled(true);
-            return 5;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [setVoiceEnrolled, state]);
+  useEffect(() => () => {
+    recordingRef.current = false;
+    sourceRef.current?.stop();
+    clientRef.current?.disconnect();
+    playbackRef.current?.pause();
+    if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current);
+  }, []);
 
-  const startRecording = () => {
+  const startRecording = async () => {
+    setCaptureError(null);
     setCountdown(5);
-    setState("recording");
+    setCapturedFrameCount(0);
+    setState("connecting");
+
+    let source: ReturnType<typeof createAudioSource> | null = null;
+    const frames: Int16Array[] = [];
+    let nonZeroSamples = 0;
+
+    try {
+      const client = await new Promise<RoundtableClient>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Could not connect to the meeting server.")), 10000);
+        const connectedClient = new RoundtableClient({
+          serverUrl,
+          sessionId: sessionCode,
+          name,
+          onJoined: () => {
+            clearTimeout(timeout);
+            resolve(connectedClient);
+          },
+          onStatusChange: (status) => {
+            if (status === "reconnecting" || status === "disconnected") {
+              clearTimeout(timeout);
+              reject(new Error("Connection to the meeting server was lost."));
+            }
+          },
+        });
+        clientRef.current = connectedClient;
+        connectedClient.connect();
+      });
+
+      source = createAudioSource();
+      sourceRef.current = source;
+      source.onChunk((pcm, captureTsMs) => {
+        if (!recordingRef.current || pcm.length !== 1600) return;
+        const frame = pcm.slice();
+        frames.push(frame);
+        for (let i = 0; i < frame.length; i++) {
+          if (frame[i] !== 0) nonZeroSamples++;
+        }
+        clientRef.current?.sendAudioFrame(frame, captureTsMs);
+        let sumSquares = 0;
+        for (let i = 0; i < frame.length; i++) {
+          const sample = frame[i] / 32768;
+          sumSquares += sample * sample;
+        }
+        setMicLevel(Math.min(1, Math.sqrt(sumSquares / frame.length) * 4));
+      });
+      await source.start();
+
+      recordingRef.current = true;
+      setState("recording");
+      const startedAt = performance.now();
+      while (performance.now() - startedAt < 5000) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        setCountdown(Math.max(0, Math.ceil(5 - (performance.now() - startedAt) / 1000)));
+      }
+
+      recordingRef.current = false;
+      source.stop();
+      sourceRef.current = null;
+      source = null;
+      client.disconnect();
+      clientRef.current = null;
+
+      if (frames.length < 45 || nonZeroSamples === 0) {
+        throw new Error("Microphone recording was empty or too short. Check microphone permission and try again.");
+      }
+
+      capturedAudioRef.current = frames;
+      setCapturedFrameCount(frames.length);
+      setVoiceEnrolled(true);
+      setState("captured");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Microphone recording failed.";
+      setCaptureError(message);
+      setState("idle");
+      recordingRef.current = false;
+      source?.stop();
+      sourceRef.current = null;
+      clientRef.current?.disconnect();
+      clientRef.current = null;
+    }
   };
 
-  const handlePlaySample = () => {
+  const handlePlaySample = async () => {
+    const frames = capturedAudioRef.current;
+    if (!frames) return;
+    const sampleCount = frames.reduce((count, frame) => count + frame.length, 0);
+    const wav = new ArrayBuffer(44 + sampleCount * 2);
+    const view = new DataView(wav);
+    const writeText = (offset: number, value: string) => {
+      for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+    };
+    writeText(0, "RIFF");
+    view.setUint32(4, 36 + sampleCount * 2, true);
+    writeText(8, "WAVEfmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, 16000, true);
+    view.setUint32(28, 32000, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeText(36, "data");
+    view.setUint32(40, sampleCount * 2, true);
+    let offset = 44;
+    for (const frame of frames) {
+      for (let i = 0; i < frame.length; i++, offset += 2) view.setInt16(offset, frame[i], true);
+    }
+    if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current);
+    const url = URL.createObjectURL(new Blob([wav], { type: "audio/wav" }));
+    playbackUrlRef.current = url;
+    const audio = new Audio(url);
+    playbackRef.current = audio;
+    const finishPlayback = () => {
+      setIsPlaying(false);
+      URL.revokeObjectURL(url);
+      playbackUrlRef.current = null;
+      playbackRef.current = null;
+    };
+    audio.onended = finishPlayback;
+    audio.onerror = finishPlayback;
     setIsPlaying(true);
-    setTimeout(() => setIsPlaying(false), 2500);
+    try {
+      await audio.play();
+    } catch (error) {
+      finishPlayback();
+      setCaptureError(error instanceof Error ? error.message : "Could not play the recorded sample.");
+    }
   };
 
   const handleProceed = () => {
@@ -92,8 +213,8 @@ export default function VoiceEnrollmentScreen() {
               </View>
               <Text style={styles.readyTitle}>You're ready, {name}.</Text>
               <Text style={styles.readyDesc}>
-                Roundtable will use your voice to attribute captions during the
-                meeting. Entering meeting lobby...
+                Your microphone sample has been sent through the meeting speech
+                pipeline. Entering the meeting lobby...
               </Text>
               <ActivityIndicator
                 size="small"
@@ -117,11 +238,13 @@ export default function VoiceEnrollmentScreen() {
                 />
               </View>
 
-              <Text style={styles.cardTitle}>Let's learn your voice</Text>
+              <Text style={styles.cardTitle}>Check your voice sample</Text>
               <Text style={styles.cardDesc}>
-                Say your name naturally so Roundtable can recognize you during
-                the conversation.
+                Speak for five seconds. Your live 16 kHz microphone frames are sent
+                to the meeting server and processed by its speech pipeline.
               </Text>
+
+              {captureError && <Text style={styles.captureError}>{captureError}</Text>}
 
               {/* Natural prompt card (Section 12) */}
               <View style={styles.promptBox}>
@@ -143,6 +266,13 @@ export default function VoiceEnrollmentScreen() {
                 </View>
               )}
 
+              {state === "connecting" && (
+                <View style={styles.recordingWrap}>
+                  <ActivityIndicator color={colors.primaryLight} />
+                  <Text style={styles.cardDesc}>Connecting to the meeting and requesting microphone access…</Text>
+                </View>
+              )}
+
               {/* State: Recording */}
               {state === "recording" && (
                 <View style={styles.recordingWrap}>
@@ -159,7 +289,7 @@ export default function VoiceEnrollmentScreen() {
                       height={60}
                       barCount={30}
                       color={colors.danger}
-                      level={0.7}
+                      level={micLevel}
                     />
                   </View>
                 </View>
@@ -175,7 +305,7 @@ export default function VoiceEnrollmentScreen() {
                       color={colors.success}
                     />
                     <Text style={styles.successText}>
-                      Voice sample captured: {name}
+                      Sent {capturedFrameCount} microphone frames for {name}
                     </Text>
                   </View>
 
@@ -186,7 +316,7 @@ export default function VoiceEnrollmentScreen() {
                         height={40}
                         barCount={24}
                         color={colors.cyan}
-                        level={0.6}
+                        level={micLevel}
                       />
                     </View>
                   )}
@@ -340,6 +470,11 @@ const styles = StyleSheet.create({
   recordingWrap: {
     width: "100%",
     alignItems: "center",
+  },
+  captureError: {
+    color: colors.danger,
+    textAlign: "center",
+    marginBottom: 12,
   },
   countdownPill: {
     flexDirection: "row",
