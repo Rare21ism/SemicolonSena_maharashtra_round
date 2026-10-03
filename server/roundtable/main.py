@@ -44,6 +44,24 @@ async def health():
     return HealthResponse(status="ok")
 
 
+@app.get("/health/session/{session_id}")
+async def session_health(session_id: str):
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.diagnostics()
+
+
+@app.get("/health/details")
+async def health_details():
+    return {
+        "status": "ok",
+        "active_sessions": len(session_manager.sessions_by_id),
+        "connected_devices": sum(s.diagnostics()["connected_devices"] for s in session_manager.sessions_by_id.values()),
+        "pipeline_queue_depth": sum(s.diagnostics()["pipeline_queue_depth"] for s in session_manager.sessions_by_id.values()),
+    }
+
+
 @app.post("/sessions", response_model=SessionCreateResponse)
 async def create_session():
     session = await session_manager.create_session()

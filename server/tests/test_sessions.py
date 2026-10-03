@@ -7,6 +7,8 @@ from starlette.testclient import TestClient
 
 from roundtable.main import app
 from roundtable.sessions import SessionManager
+import numpy as np
+from roundtable.protocol import pack_audio_frame
 
 
 @pytest.fixture
@@ -73,3 +75,26 @@ def test_websocket_join_flow(client):
         assert pong["type"] == "pong"
         assert pong["t0"] == 1234.5
         assert "server_ts_ms" in pong
+
+
+def test_binary_frame_requires_join_and_validates_device(client):
+    code = client.post("/sessions").json()["code"]
+    with client.websocket_connect(f"/ws/{code}") as ws:
+        ws.send_json({"type": "join", "name": "Mic", "platform": "web"})
+        joined = ws.receive_json()
+        ws.receive_json()  # roster
+        frame = pack_audio_frame(joined["device_idx"], 0, 1.0, np.zeros(1600, dtype=np.int16))
+        ws.send_bytes(frame)
+
+
+def test_resume_token_is_session_scoped(client):
+    first = client.post("/sessions").json()["code"]
+    second = client.post("/sessions").json()["code"]
+    with client.websocket_connect(f"/ws/{first}") as ws:
+        ws.send_json({"type": "join", "name": "Mic", "platform": "web"})
+        joined = ws.receive_json()
+        ws.receive_json()
+    with client.websocket_connect(f"/ws/{second}") as ws:
+        ws.send_json({"type": "resume", "token": joined["token"], "last_seq": 0})
+        with pytest.raises(Exception):
+            ws.receive_json()
