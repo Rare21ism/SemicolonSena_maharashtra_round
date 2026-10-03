@@ -38,3 +38,4 @@ Laptop (web) + Android phone + iPhone (mobile browser, native if time) join one 
 
 ## Targets
 Time-to-first-partial < 500 ms, time-to-final < 2 s, log per-stage latency per platform.
+sherpa final under about 1 s, whisper-corrected final under about 2 s.
