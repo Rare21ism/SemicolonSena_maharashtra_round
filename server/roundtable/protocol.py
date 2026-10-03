@@ -6,6 +6,7 @@ Mirrors packages/protocol/src/index.ts and PROTOCOL.md.
 from __future__ import annotations
 
 import struct
+import math
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Optional, Union
 import numpy as np
@@ -177,11 +178,22 @@ def unpack_audio_frame(raw_bytes: bytes) -> AudioFrame:
         HEADER_STRUCT.unpack_from(raw_bytes, 0)
     )
 
+    if msg_type != MSG_TYPE_AUDIO:
+        raise ValueError(f"Unsupported audio message type: {msg_type}")
+    if version != PROTOCOL_VERSION:
+        raise ValueError(f"Unsupported audio protocol version: {version}")
+    if not math.isfinite(capture_ts_ms) or capture_ts_ms < 0:
+        raise ValueError("Invalid audio capture timestamp")
+    if sample_count == 0 or sample_count > SAMPLE_RATE:
+        raise ValueError(f"Invalid audio sample count: {sample_count}")
+
     expected_bytes = AUDIO_HEADER_BYTES + sample_count * 2
     if len(raw_bytes) < expected_bytes:
         raise ValueError(
             f"Audio frame payload truncated: got {len(raw_bytes)} bytes, expected {expected_bytes}"
         )
+    if len(raw_bytes) > expected_bytes:
+        raise ValueError(f"Audio frame has trailing bytes: got {len(raw_bytes)}, expected {expected_bytes}")
 
     # Extract int16 PCM slice as a copied numpy array to avoid memory buffer sharing issues
     pcm = np.frombuffer(
