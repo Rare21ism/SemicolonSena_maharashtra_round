@@ -52,21 +52,16 @@ export default function JoinMeetingScreen() {
         setSessionPreview({
           code: codeToTest,
           meetingName: "Team Discussion",
-          hostName: info.roster[0]?.name || "Michael",
-          participantCount: Math.max(info.roster.length, 3),
+          hostName: info.roster[0]?.name || "Host",
+          participantCount: info.roster.length,
         });
       } else {
         setErrorMsg("Meeting not found. Check the code and try again.");
         setSessionPreview(null);
       }
-    } catch {
-      // In offline / mock mode: preview gracefully per Section 10
-      setSessionPreview({
-        code: codeToTest,
-        meetingName: "Team Discussion",
-        hostName: "Michael",
-        participantCount: 3,
-      });
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : "Could not reach the meeting server.");
+      setSessionPreview(null);
     } finally {
       setLoading(false);
     }
