@@ -39,7 +39,7 @@ export default function AudioSetupScreen() {
   const requestPermission = async () => {
     setPermissionError(null);
     if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setPermissionError("Microphone access is unavailable in this environment. Open Roundtable in a supported web browser.");
+      setPermissionError("Microphone access is unavailable in this environment. Please open Roundtable in a modern web browser.");
       return;
     }
     try {
@@ -74,7 +74,7 @@ export default function AudioSetupScreen() {
       updateLevel();
     } catch (error) {
       console.warn("Microphone permission failed:", error);
-      setPermissionError("Microphone access is needed to hear you. Check your browser permissions and try again.");
+      setPermissionError("Microphone access is needed to capture room speech. Check browser permissions and try again.");
       setHasPermission(false);
     }
   };
@@ -96,9 +96,9 @@ export default function AudioSetupScreen() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
+            <Ionicons name="arrow-back" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Microphone Setup</Text>
+          <Text style={styles.headerTitle}>MICROPHONE SETUP</Text>
           <View style={{ width: 32 }} />
         </View>
 
@@ -110,43 +110,46 @@ export default function AudioSetupScreen() {
 
         {!hasPermission ? (
           <View style={styles.card}>
-            <View style={styles.micCircle}>
-              <Ionicons name="mic-outline" size={28} color={colors.primary} />
-            </View>
-
+            <Text style={styles.cardKicker}>AUDIO INPUT CHECK</Text>
             <Text style={styles.cardTitle}>Can Roundtable hear you?</Text>
             <Text style={styles.cardDesc}>
-              Allow microphone access so Roundtable can convert speech to live captions.
+              Allow microphone access so Roundtable can convert spoken words into live captions.
             </Text>
 
-            {permissionError && <Text style={styles.permissionError}>{permissionError}</Text>}
+            {permissionError && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={16} color={colors.danger} />
+                <Text style={styles.permissionError}>{permissionError}</Text>
+              </View>
+            )}
 
             <Button
               title="Enable Microphone"
               variant="primary"
               size="lg"
-              icon={<Ionicons name="mic" size={18} color="#FFFFFF" />}
+              icon={<Ionicons name="mic" size={18} color="#FBF9F5" />}
               onPress={requestPermission}
               style={styles.btnFull}
             />
           </View>
         ) : (
           <View style={styles.card}>
-            <View style={styles.readyCircle}>
-              <Ionicons name="checkmark" size={28} color={colors.success} />
+            <View style={styles.readyHeader}>
+              <View style={styles.readyDot} />
+              <Text style={styles.cardKicker}>MICROPHONE ACTIVE</Text>
             </View>
 
             <Text style={styles.cardTitle}>Microphone connected</Text>
             <Text style={styles.cardDesc}>
-              Speak a few words to confirm your microphone is responding smoothly.
+              Speak a few words to confirm your voice is being captured clearly.
             </Text>
 
-            {/* Audio Waveform Visualizer */}
+            {/* Restrained Audio Waveform Visualizer */}
             <View style={styles.waveformWrapper}>
               <AudioWaveform
                 isActive={true}
-                height={48}
-                barCount={26}
+                height={40}
+                barCount={28}
                 color={colors.primaryLight}
                 level={level}
               />
@@ -157,12 +160,12 @@ export default function AudioSetupScreen() {
 
             {/* Continue Button */}
             <Button
-              title="Continue"
+              title="Continue to Voice Setup"
               variant="primary"
               size="lg"
-              icon={<Ionicons name="arrow-forward" size={18} color="#FFFFFF" />}
+              rightIcon={<Ionicons name="arrow-forward" size={18} color="#FBF9F5" />}
               onPress={handleContinue}
-              style={[styles.btnFull, { marginTop: 20 }]}
+              style={[styles.btnFull, { marginTop: 24 }]}
             />
           </View>
         )}
@@ -176,16 +179,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bgPrimary,
   },
-  permissionError: {
-    color: colors.danger,
-    textAlign: "center",
-    marginBottom: 14,
-    fontSize: 13,
-    lineHeight: 18,
-  },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
     paddingBottom: 48,
     maxWidth: 540,
     width: "100%",
@@ -195,29 +191,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
   backButton: {
-    padding: 6,
+    padding: 8,
     borderRadius: radii.sm,
     backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: 12,
+    fontWeight: "800",
     color: colors.textPrimary,
+    letterSpacing: 2,
   },
   roomPill: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "center",
-    backgroundColor: "rgba(99, 102, 241, 0.08)",
+    backgroundColor: colors.bgSecondary,
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.25)",
-    paddingVertical: 5,
-    paddingHorizontal: 14,
+    borderColor: colors.borderDefault,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
     borderRadius: radii.full,
-    gap: 6,
-    marginBottom: 24,
+    gap: 8,
+    marginBottom: 28,
   },
   roomPillCode: {
     fontSize: 13,
@@ -232,53 +235,73 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.bgCard,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing.xl,
-    alignItems: "center",
+    alignItems: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  micCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+  cardKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 6,
   },
-  readyCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
+  readyHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 6,
+  },
+  readyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.success,
   },
   cardTitle: {
-    ...typography.h2,
-    textAlign: "center",
+    ...typography.h1,
+    textAlign: "left",
     marginBottom: 8,
   },
   cardDesc: {
     ...typography.body,
-    textAlign: "center",
-    color: colors.textMuted,
+    textAlign: "left",
+    color: colors.textSecondary,
     marginBottom: 20,
-    maxWidth: 380,
+    lineHeight: 23,
+  },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.dangerBg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    marginBottom: 16,
+    width: "100%",
+  },
+  permissionError: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
   },
   waveformWrapper: {
     width: "100%",
-    backgroundColor: colors.bgInput,
-    borderRadius: radii.lg,
-    paddingVertical: 14,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.md,
+    paddingVertical: 16,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   btnFull: {
     width: "100%",
   },
 });
-

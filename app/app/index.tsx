@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,18 +15,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, radii, spacing, typography } from "../src/theme";
 import { Button } from "../src/components/Button";
 import { Input } from "../src/components/Input";
+import { RoundtableSpatialMotif } from "../src/components/RoundtableSpatialMotif";
 import { useSession } from "../src/state/SessionContext";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const {
-    name,
-    setName,
-    serverUrl,
-    setServerUrl,
-  } = useSession();
-
+  const { name, setName, serverUrl, setServerUrl } = useSession();
   const [showConfig, setShowConfig] = useState(false);
+  const viewportWidth = useWindowDimensions().width;
+  const isWide = viewportWidth >= 900;
+  const isCompact = viewportWidth < 520;
 
   const handleCreate = () => {
     router.push("/create");
@@ -42,69 +41,75 @@ export default function HomeScreen() {
         style={styles.container}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { width: Math.min(1120, viewportWidth), boxSizing: "border-box" },
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Brand Header */}
-          <View style={styles.topNav}>
+          {/* Top Editorial Header */}
+          <View
+            style={[
+              styles.pageGutter,
+              { width: Math.max(0, Math.min(1120, viewportWidth) - 48) },
+            ]}
+          >
+        <View style={[styles.topNav, isCompact && styles.topNavCompact]}>
             <View style={styles.brandRow}>
               <View style={styles.logoBadge}>
-                <Ionicons name="mic-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="mic-outline" size={18} color="#FBF9F5" />
               </View>
-              <Text style={styles.brandTitle}>Roundtable</Text>
+              <Text style={styles.brandTitle}>ROUNDTABLE</Text>
+            </View>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>LIVE SPEECH TRANSCRIPTION</Text>
             </View>
           </View>
 
-          {/* Main Hero & Product Intent */}
-          <View style={styles.heroSection}>
-            <Text style={styles.heroTitle}>
-              Everyone hears the conversation.
-            </Text>
+          <View style={[styles.heroRow, isWide && styles.heroRowWide]}>
+            <View style={[styles.heroSection, isWide && styles.heroSectionWide]}>
+              <Text style={styles.kickerLabel}>GROUP CONVERSATION CAPTIONS</Text>
+              <Text
+                style={[
+                  styles.heroTitle,
+                  isWide && styles.heroTitleWide,
+                  isCompact && styles.heroTitleCompact,
+                ]}
+              >
+                {isCompact ? (
+                  <>EVERY VOICE.{"\n"}ONE{"\n"}CONVERSATION.</>
+                ) : (
+                  <>EVERY VOICE.{"\n"}ONE CONVERSATION.</>
+                )}
+              </Text>
+              <Text style={styles.heroSubtitle}>
+                Phones and laptops listen from around the room, bringing speech together in one shared, speaker-aware transcript.
+              </Text>
+            </View>
 
-            <Text style={styles.heroSubtitle}>
-              Live captioning for group discussions. Roundtable uses the microphones
-              in the room to stream a single, clear transcript that identifies who is speaking.
-            </Text>
-          </View>
-
-          {/* Visual Motif: Circular Roundtable Table */}
-          <View style={styles.tableMotifCard}>
-            <View style={styles.circleTableOuter}>
-              <View style={styles.circleTableInner}>
-                <Ionicons name="chatbubbles-outline" size={22} color={colors.primaryLight} />
-                <Text style={styles.tableCenterLabel}>ROUNDTABLE</Text>
-              </View>
-
-              {/* Speaker positions */}
-              <View style={[styles.speakerNode, styles.nodeTop]}>
-                <View style={[styles.nodeDot, { backgroundColor: "#A855F7" }]} />
-                <Text style={styles.nodeName}>Sarah</Text>
-              </View>
-
-              <View style={[styles.speakerNode, styles.nodeLeft]}>
-                <View style={[styles.nodeDot, { backgroundColor: "#38BDF8" }]} />
-                <Text style={styles.nodeName}>Priya</Text>
-              </View>
-
-              <View style={[styles.speakerNode, styles.nodeRight]}>
-                <View style={[styles.nodeDot, { backgroundColor: "#34D399" }]} />
-                <Text style={styles.nodeName}>Alex</Text>
-              </View>
+            <View style={[styles.motifContainer, isWide && styles.motifContainerWide]}>
+              <RoundtableSpatialMotif />
             </View>
           </View>
 
           {/* Action Card: Display Name & Actions */}
-          <View style={styles.actionCard}>
+          <View
+            style={[
+              styles.actionCard,
+              { width: Math.max(0, Math.min(650, viewportWidth - 96)) },
+            ]}
+          >
             <Input
               label="YOUR NAME"
-              placeholder="Enter your name"
+              placeholder="Enter your full name"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
               icon={
                 <Ionicons
                   name="person-outline"
-                  size={18}
+                  size={16}
                   color={colors.textMuted}
                 />
               }
@@ -115,7 +120,8 @@ export default function HomeScreen() {
                 title="Start a Conversation"
                 variant="primary"
                 size="lg"
-                icon={<Ionicons name="add" size={20} color="#FFFFFF" />}
+                icon={<Ionicons name="add" size={18} color="#FBF9F5" />}
+                disabled={!name.trim()}
                 onPress={handleCreate}
               />
 
@@ -123,7 +129,7 @@ export default function HomeScreen() {
                 title="Join a Conversation"
                 variant="secondary"
                 size="lg"
-                icon={<Ionicons name="enter-outline" size={18} color={colors.textPrimary} />}
+                icon={<Ionicons name="arrow-forward-outline" size={16} color={colors.textPrimary} />}
                 onPress={handleJoin}
               />
             </View>
@@ -132,6 +138,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.toggleConfig}
               onPress={() => setShowConfig(!showConfig)}
+              activeOpacity={0.7}
             >
               <Ionicons
                 name={showConfig ? "chevron-up" : "chevron-down"}
@@ -139,7 +146,7 @@ export default function HomeScreen() {
                 color={colors.textMuted}
               />
               <Text style={styles.toggleConfigText}>
-                {showConfig ? "Hide server settings" : "Server settings"}
+                {showConfig ? "Hide server endpoint" : "Server endpoint configuration"}
               </Text>
             </TouchableOpacity>
 
@@ -156,6 +163,32 @@ export default function HomeScreen() {
               </View>
             )}
           </View>
+
+          <View style={styles.storySection}>
+            <Text style={styles.storyKicker}>FROM ROOM TO TRANSCRIPT</Text>
+            <Text style={styles.storyTitle}>One conversation, heard together.</Text>
+            <View style={[styles.steps, isWide && styles.stepsWide]}>
+              <View style={styles.stepItem}>
+                <Text style={styles.stepNumber}>01</Text>
+                <Text style={styles.stepTitle}>Bring a device</Text>
+                <Text style={styles.stepCopy}>Each person joins from a phone or laptop.</Text>
+              </View>
+              <View style={styles.stepItem}>
+                <Text style={styles.stepNumber}>02</Text>
+                <Text style={styles.stepTitle}>Let the room speak</Text>
+                <Text style={styles.stepCopy}>Connected microphones contribute live audio.</Text>
+              </View>
+              <View style={styles.stepItem}>
+                <Text style={styles.stepNumber}>03</Text>
+                <Text style={styles.stepTitle}>Follow along</Text>
+                <Text style={styles.stepCopy}>Speech appears as shared captions with speaker labels.</Text>
+              </View>
+            </View>
+            <Text style={styles.useCases}>
+              TEAM DISCUSSIONS <Text style={styles.useCaseDivider}>·</Text> CLASSROOMS <Text style={styles.useCaseDivider}>·</Text> GROUP STUDY
+            </Text>
+          </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -171,18 +204,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    paddingBottom: 48,
-    maxWidth: 540,
-    width: "100%",
+    paddingVertical: 28,
+    paddingBottom: 72,
+    maxWidth: 1120,
     alignSelf: "center",
+  },
+  pageGutter: {
+    paddingHorizontal: 24,
   },
   topNav: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 40,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  topNavCompact: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 28,
   },
   brandRow: {
     flexDirection: "row",
@@ -190,117 +234,120 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   logoBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
+    width: 32,
+    height: 32,
+    borderRadius: radii.sm,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   brandTitle: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "800",
     color: colors.textPrimary,
-    letterSpacing: -0.3,
+    letterSpacing: 2,
   },
-  heroSection: {
-    alignItems: "center",
-    marginBottom: 28,
-  },
-  heroTitle: {
-    ...typography.h1,
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  heroSubtitle: {
-    ...typography.body,
-    textAlign: "center",
-    maxWidth: 460,
-    lineHeight: 24,
-  },
-  tableMotifCard: {
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    borderRadius: radii.xl,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 28,
-  },
-  circleTableOuter: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.25)",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  circleTableInner: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  tableCenterLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: colors.primaryLight,
-    letterSpacing: 1,
-  },
-  speakerNode: {
-    position: "absolute",
+  liveBadge: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
     backgroundColor: colors.bgSecondary,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    gap: 6,
+    maxWidth: "100%",
   },
-  nodeTop: {
-    top: -12,
-    alignSelf: "center",
-  },
-  nodeLeft: {
-    bottom: 16,
-    left: -20,
-  },
-  nodeRight: {
-    bottom: 16,
-    right: -20,
-  },
-  nodeDot: {
+  liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    backgroundColor: colors.success,
   },
-  nodeName: {
-    fontSize: 11,
-    fontWeight: "600",
+  liveBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
     color: colors.textSecondary,
+    letterSpacing: 1,
+  },
+  heroSection: {
+    alignItems: "flex-start",
+    marginBottom: 24,
+    width: "100%",
+  },
+  heroRow: {
+    width: "100%",
+  },
+  heroRowWide: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 48,
+    marginTop: 18,
+  },
+  heroSectionWide: {
+    flex: 1,
+    marginBottom: 0,
+    width: "auto",
+  },
+  kickerLabel: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 8,
+  },
+  heroTitle: {
+    ...typography.display1,
+    textAlign: "left",
+    marginBottom: 16,
+    width: "100%",
+    maxWidth: "100%",
+  },
+  heroTitleWide: {
+    fontSize: 44,
+    lineHeight: 50,
+    letterSpacing: -1.3,
+  },
+  heroTitleCompact: {
+    fontSize: 38,
+    lineHeight: 44,
+    letterSpacing: -1,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    textAlign: "left",
+    color: colors.textSecondary,
+    maxWidth: 480,
+    width: "100%",
+    fontSize: 16,
+    lineHeight: 25,
+  },
+  motifContainer: {
+    paddingVertical: 12,
+    marginBottom: 28,
+  },
+  motifContainerWide: {
+    flex: 1,
+    marginBottom: 0,
   },
   actionCard: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 650,
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     padding: spacing.lg,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
   buttonStack: {
     gap: 12,
-    marginTop: 14,
-    marginBottom: 10,
+    marginTop: 16,
+    marginBottom: 12,
   },
   toggleConfig: {
     flexDirection: "row",
@@ -308,6 +355,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     paddingVertical: 8,
+    marginTop: 4,
   },
   toggleConfigText: {
     fontSize: 12,
@@ -320,5 +368,57 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
   },
+  storySection: {
+    marginTop: 52,
+    paddingTop: 28,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderDefault,
+  },
+  storyKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 10,
+  },
+  storyTitle: {
+    ...typography.h2,
+    fontSize: 30,
+    lineHeight: 38,
+    maxWidth: 520,
+    marginBottom: 26,
+  },
+  steps: {
+    gap: 0,
+  },
+  stepsWide: {
+    flexDirection: "row",
+  },
+  stepItem: {
+    flex: 1,
+    paddingVertical: 18,
+    paddingRight: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  stepNumber: {
+    ...typography.code,
+    color: colors.accentTerracotta,
+    marginBottom: 16,
+  },
+  stepTitle: {
+    ...typography.h3,
+    marginBottom: 6,
+  },
+  stepCopy: {
+    ...typography.body,
+    maxWidth: 270,
+  },
+  useCases: {
+    ...typography.label,
+    color: colors.textMuted,
+    marginTop: 28,
+    letterSpacing: 1.2,
+  },
+  useCaseDivider: {
+    color: colors.accentTerracotta,
+  },
 });
-

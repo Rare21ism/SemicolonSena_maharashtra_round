@@ -23,7 +23,6 @@ export default function CreateMeetingScreen() {
     sessionName,
     setSessionName,
     sessionCode,
-    name,
     createSessionOnBackend,
     setIsHost,
   } = useSession();
@@ -67,46 +66,49 @@ export default function CreateMeetingScreen() {
               onPress={() => router.back()}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
+              <Ionicons name="arrow-back" size={18} color={colors.textPrimary} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Start a conversation</Text>
+            <Text style={styles.headerTitle}>START CONVERSATION</Text>
             <View style={{ width: 32 }} />
           </View>
 
           {!created ? (
             <View style={styles.formCard}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="chatbubbles-outline" size={24} color={colors.primary} />
-              </View>
-
-              <Text style={styles.cardTitle}>New conversation</Text>
+              <Text style={styles.cardKicker}>STEP 1 OF 2</Text>
+              <Text style={styles.cardTitle}>Name your room</Text>
               <Text style={styles.cardDesc}>
-                Create a room. Anyone with the code can join with their phone or laptop
-                to contribute to the live transcript.
+                Create a space for your group. Participants can join with their phone or laptop to share room audio.
               </Text>
 
-              <Input
-                label="CONVERSATION NAME"
-                placeholder="e.g. Weekly Sync"
-                value={sessionName}
-                onChangeText={setSessionName}
-                icon={
-                  <Ionicons
-                    name="bookmark-outline"
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                }
-              />
+              <View style={styles.inputWrapper}>
+                <Input
+                  label="CONVERSATION NAME"
+                  placeholder="e.g. Product Strategy Review"
+                  value={sessionName}
+                  onChangeText={setSessionName}
+                  icon={
+                    <Ionicons
+                      name="bookmark-outline"
+                      size={16}
+                      color={colors.textMuted}
+                    />
+                  }
+                />
+              </View>
 
-              {error && <Text style={styles.errorText}>{error}</Text>}
+              {error && (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.danger} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
 
               <Button
-                title="Create Room"
+                title="Create Meeting Code"
                 variant="primary"
                 size="lg"
                 loading={loading}
-                icon={<Ionicons name="add" size={20} color="#FFFFFF" />}
+                icon={<Ionicons name="add" size={18} color="#FBF9F5" />}
                 onPress={handleCreate}
                 style={styles.createBtn}
               />
@@ -122,28 +124,28 @@ export default function CreateMeetingScreen() {
               <View style={styles.participantPill}>
                 <View style={styles.onlineDot} />
                 <Text style={styles.participantText}>
-                  Share this code with everyone participating.
+                  Share this 6-character code with everyone in the room.
                 </Text>
               </View>
 
               {/* Next Steps Buttons */}
               <View style={styles.actionStack}>
                 <Button
-                  title="Check Microphone"
+                  title="Set Up Microphone"
                   variant="primary"
                   size="lg"
                   rightIcon={
                     <Ionicons
                       name="arrow-forward"
                       size={18}
-                      color="#FFFFFF"
+                      color="#FBF9F5"
                     />
                   }
                   onPress={handleProceedToSetup}
                 />
 
                 <Button
-                  title="Back"
+                  title="Change Meeting Name"
                   variant="ghost"
                   size="md"
                   onPress={() => setCreated(false)}
@@ -158,12 +160,6 @@ export default function CreateMeetingScreen() {
 }
 
 const styles = StyleSheet.create({
-  errorText: {
-    color: colors.danger,
-    textAlign: "center",
-    marginTop: 8,
-    marginBottom: 8,
-  },
   safeArea: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
@@ -172,8 +168,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
     paddingBottom: 48,
     maxWidth: 540,
     width: "100%",
@@ -183,49 +179,77 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 24,
+    marginBottom: 32,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
   backButton: {
-    padding: 6,
+    padding: 8,
     borderRadius: radii.sm,
     backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: 12,
+    fontWeight: "800",
     color: colors.textPrimary,
+    letterSpacing: 2,
   },
   formCard: {
     backgroundColor: colors.bgCard,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing.xl,
-    alignItems: "center",
+    alignItems: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+  cardKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 6,
   },
   cardTitle: {
-    ...typography.h2,
-    textAlign: "center",
+    ...typography.h1,
+    textAlign: "left",
     marginBottom: 8,
   },
   cardDesc: {
     ...typography.body,
-    textAlign: "center",
-    color: colors.textMuted,
+    textAlign: "left",
+    color: colors.textSecondary,
     marginBottom: 24,
-    maxWidth: 400,
+    lineHeight: 23,
+  },
+  inputWrapper: {
+    width: "100%",
+    marginBottom: 16,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.dangerBg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    marginBottom: 16,
+    width: "100%",
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
   },
   createBtn: {
     width: "100%",
-    marginTop: 16,
   },
   shareSection: {
     gap: 16,
@@ -234,12 +258,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    backgroundColor: colors.successBg,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)",
-    paddingVertical: 8,
+    borderColor: "rgba(43, 97, 64, 0.2)",
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: radii.full,
+    borderRadius: radii.md,
     gap: 8,
     alignSelf: "center",
   },
@@ -255,8 +279,7 @@ const styles = StyleSheet.create({
     color: colors.success,
   },
   actionStack: {
-    gap: 10,
+    gap: 12,
     marginTop: 8,
   },
 });
-

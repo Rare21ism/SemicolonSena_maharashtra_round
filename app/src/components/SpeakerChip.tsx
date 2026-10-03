@@ -54,14 +54,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    backgroundColor: "rgba(23, 32, 51, 0.8)",
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgCard,
     borderRadius: radii.full,
-    paddingRight: 10,
-    paddingLeft: 3,
-    paddingVertical: 3,
-    gap: 6,
+    paddingRight: 12,
+    paddingLeft: 4,
+    paddingVertical: 4,
+    gap: 7,
     alignSelf: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   avatar: {
     width: 22,
@@ -71,13 +76,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#FBF9F5",
   },
   nameText: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "700",
     color: colors.textPrimary,
   },
   speakingWave: {
@@ -91,4 +96,5 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
 });
+
 

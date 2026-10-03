@@ -16,6 +16,7 @@ interface CaptionListProps {
   roster: DeviceInfo[];
   activeSpeakerId?: number | null;
   overlappingCount?: number;
+  micLevel?: number;
 }
 
 interface CaptionCluster {
@@ -31,6 +32,7 @@ export const CaptionList: React.FC<CaptionListProps> = ({
   roster,
   activeSpeakerId,
   overlappingCount = 0,
+  micLevel = 0,
 }) => {
   const flatListRef = useRef<FlatList>(null);
 
@@ -70,7 +72,7 @@ export const CaptionList: React.FC<CaptionListProps> = ({
         <View style={styles.overlapBanner}>
           <View style={styles.overlapDot} />
           <Text style={styles.overlapBannerText}>
-            Multiple people speaking at once
+            Multiple people speaking simultaneously
           </Text>
         </View>
       )}
@@ -79,15 +81,17 @@ export const CaptionList: React.FC<CaptionListProps> = ({
         <View style={styles.emptyContainer}>
           <View style={styles.waveformBox}>
             <AudioWaveform
-              isActive={true}
-              height={36}
-              barCount={20}
+              isActive={micLevel >= 0.01}
+              height={32}
+              barCount={24}
               color={colors.primaryLight}
+              level={micLevel}
             />
           </View>
-          <Text style={styles.emptyTitle}>Roundtable is listening…</Text>
+          <Text style={styles.emptyKicker}>THE CONVERSATION</Text>
+          <Text style={styles.emptyTitle}>Waiting for speech</Text>
           <Text style={styles.emptySubtitle}>
-            Speak naturally. Live captions will appear here as people talk.
+            Speak naturally. Spoken words will flow into this transcript as people talk around the table.
           </Text>
         </View>
       ) : (
@@ -121,15 +125,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     position: "relative",
+    backgroundColor: colors.bgPrimary,
   },
   overlapBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    backgroundColor: colors.dangerBg,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(239, 68, 68, 0.25)",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    borderBottomColor: "rgba(168, 50, 50, 0.2)",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     gap: 8,
   },
   overlapDot: {
@@ -140,14 +145,15 @@ const styles = StyleSheet.create({
   },
   overlapBannerText: {
     fontSize: 12,
-    fontWeight: "600",
-    color: "#FCA5A5",
+    fontWeight: "700",
+    color: colors.danger,
+    letterSpacing: 0.5,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: 48,
-    maxWidth: 720,
+    paddingHorizontal: 28,
+    paddingVertical: 24,
+    paddingBottom: 72,
+    maxWidth: 780,
     width: "100%",
     alignSelf: "center",
   },
@@ -158,26 +164,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   waveformBox: {
-    marginBottom: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: "rgba(99, 102, 241, 0.06)",
-    borderRadius: radii.xl,
+    marginBottom: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    backgroundColor: colors.bgCard,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.15)",
+    borderColor: colors.borderDefault,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  emptyKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 8,
   },
   emptyTitle: {
-    ...typography.h3,
+    ...typography.h1,
     color: colors.textPrimary,
-    marginBottom: 6,
+    marginBottom: 8,
     textAlign: "center",
   },
   emptySubtitle: {
     ...typography.body,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     textAlign: "center",
-    maxWidth: 380,
-    lineHeight: 22,
+    maxWidth: 420,
+    lineHeight: 23,
   },
 });
-

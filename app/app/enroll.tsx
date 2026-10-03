@@ -55,7 +55,7 @@ export default function VoiceEnrollmentScreen() {
 
     try {
       const client = await new Promise<RoundtableClient>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Could not connect to the room server.")), 10000);
+        const timeout = setTimeout(() => reject(new Error("Could not connect to room server.")), 10000);
         const connectedClient = new RoundtableClient({
           serverUrl,
           sessionId: sessionCode,
@@ -179,7 +179,7 @@ export default function VoiceEnrollmentScreen() {
     setState("ready");
     setTimeout(() => {
       router.push("/waiting");
-    }, 1000);
+    }, 800);
   };
 
   return (
@@ -195,9 +195,9 @@ export default function VoiceEnrollmentScreen() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
+            <Ionicons name="arrow-back" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Voice Setup</Text>
+          <Text style={styles.headerTitle}>VOICE SETUP</Text>
           <View style={{ width: 32 }} />
         </View>
 
@@ -205,36 +205,34 @@ export default function VoiceEnrollmentScreen() {
           {state === "ready" ? (
             <View style={styles.readyCard}>
               <View style={styles.readyCircle}>
-                <Ionicons name="checkmark" size={32} color={colors.success} />
+                <Ionicons name="checkmark" size={28} color={colors.success} />
               </View>
-              <Text style={styles.readyTitle}>You're ready, {name}.</Text>
+              <Text style={styles.readyTitle}>You're set, {name}.</Text>
               <Text style={styles.readyDesc}>
                 Entering the conversation room…
               </Text>
               <ActivityIndicator
                 size="small"
                 color={colors.primaryLight}
-                style={{ marginTop: 16 }}
+                style={{ marginTop: 20 }}
               />
             </View>
           ) : (
             <>
-              <View style={styles.iconCircle}>
-                <Ionicons
-                  name={state === "recording" ? "mic" : "mic-outline"}
-                  size={28}
-                  color={state === "recording" ? colors.danger : colors.primary}
-                />
-              </View>
-
+              <Text style={styles.cardKicker}>SPEAKER RECOGNITION</Text>
               <Text style={styles.cardTitle}>Let's hear your voice</Text>
               <Text style={styles.cardDesc}>
-                Say a short sentence so Roundtable can recognize you when you speak.
+                Say a short sentence so Roundtable can attribute your speech correctly during live conversation.
               </Text>
 
-              {captureError && <Text style={styles.captureError}>{captureError}</Text>}
+              {captureError && (
+                <View style={styles.errorBox}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.danger} />
+                  <Text style={styles.captureError}>{captureError}</Text>
+                </View>
+              )}
 
-              {/* Natural sentence prompt */}
+              {/* Natural sentence prompt box */}
               <View style={styles.promptBox}>
                 <Text style={styles.promptLabel}>PLEASE SAY:</Text>
                 <Text style={styles.promptText}>"Hello, my name is {name}."</Text>
@@ -244,10 +242,10 @@ export default function VoiceEnrollmentScreen() {
               {state === "idle" && (
                 <View style={styles.actionWrap}>
                   <Button
-                    title="Start 5-Second Test"
+                    title="Record 5-Second Sample"
                     variant="primary"
                     size="lg"
-                    icon={<Ionicons name="mic" size={18} color="#FFFFFF" />}
+                    icon={<Ionicons name="mic" size={18} color="#FBF9F5" />}
                     onPress={startRecording}
                     style={styles.fullWidth}
                   />
@@ -257,7 +255,7 @@ export default function VoiceEnrollmentScreen() {
               {state === "connecting" && (
                 <View style={styles.recordingWrap}>
                   <ActivityIndicator color={colors.primaryLight} />
-                  <Text style={styles.cardDesc}>Connecting microphone...</Text>
+                  <Text style={[styles.cardDesc, { marginTop: 10 }]}>Connecting audio stream...</Text>
                 </View>
               )}
 
@@ -267,14 +265,14 @@ export default function VoiceEnrollmentScreen() {
                   <View style={styles.countdownPill}>
                     <View style={styles.recDot} />
                     <Text style={styles.countdownText}>
-                      LISTENING · {countdown}s
+                      LISTENING · {countdown} / 05 seconds
                     </Text>
                   </View>
 
                   <View style={styles.waveformBox}>
                     <AudioWaveform
                       isActive={true}
-                      height={50}
+                      height={44}
                       barCount={28}
                       color={colors.danger}
                       level={micLevel}
@@ -297,21 +295,9 @@ export default function VoiceEnrollmentScreen() {
                     </Text>
                   </View>
 
-                  {isPlaying && (
-                    <View style={styles.waveformBox}>
-                      <AudioWaveform
-                        isActive={true}
-                        height={40}
-                        barCount={24}
-                        color={colors.cyan}
-                        level={micLevel}
-                      />
-                    </View>
-                  )}
-
                   <View style={styles.sampleControls}>
                     <Button
-                      title={isPlaying ? "Playing..." : "Play Sample"}
+                      title={isPlaying ? "Playing sample..." : "Play Sample"}
                       variant="secondary"
                       size="md"
                       icon={
@@ -336,7 +322,7 @@ export default function VoiceEnrollmentScreen() {
                     />
                   </View>
 
-                  {/* Name confirmation */}
+                  {/* Display Name Input */}
                   <View style={styles.nameConfirmBox}>
                     <Input
                       label="YOUR DISPLAY NAME"
@@ -346,7 +332,7 @@ export default function VoiceEnrollmentScreen() {
                       icon={
                         <Ionicons
                           name="person-outline"
-                          size={18}
+                          size={16}
                           color={colors.textMuted}
                         />
                       }
@@ -354,10 +340,10 @@ export default function VoiceEnrollmentScreen() {
                   </View>
 
                   <Button
-                    title="Continue"
+                    title="Enter Lobby"
                     variant="primary"
                     size="lg"
-                    icon={<Ionicons name="arrow-forward" size={18} color="#FFFFFF" />}
+                    icon={<Ionicons name="arrow-forward" size={18} color="#FBF9F5" />}
                     onPress={handleProceed}
                     style={[styles.fullWidth, { marginTop: 12 }]}
                   />
@@ -377,8 +363,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgPrimary,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
     paddingBottom: 48,
     maxWidth: 540,
     width: "100%",
@@ -388,66 +374,92 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
   backButton: {
-    padding: 6,
+    padding: 8,
     borderRadius: radii.sm,
     backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: 12,
+    fontWeight: "800",
     color: colors.textPrimary,
+    letterSpacing: 2,
   },
   card: {
     backgroundColor: colors.bgCard,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing.xl,
-    alignItems: "center",
+    alignItems: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+  cardKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 6,
   },
   cardTitle: {
-    ...typography.h2,
-    textAlign: "center",
+    ...typography.h1,
+    textAlign: "left",
     marginBottom: 8,
   },
   cardDesc: {
     ...typography.body,
-    textAlign: "center",
-    color: colors.textMuted,
+    textAlign: "left",
+    color: colors.textSecondary,
     marginBottom: 20,
-    maxWidth: 400,
+    lineHeight: 23,
+  },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.dangerBg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    marginBottom: 16,
+    width: "100%",
+  },
+  captureError: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
   },
   promptBox: {
     width: "100%",
-    backgroundColor: "rgba(99, 102, 241, 0.08)",
+    backgroundColor: colors.bgSecondary,
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.25)",
-    borderRadius: radii.lg,
+    borderColor: colors.borderDefault,
+    borderRadius: radii.md,
     padding: spacing.md,
-    alignItems: "center",
-    marginBottom: 20,
+    alignItems: "flex-start",
+    marginBottom: 24,
   },
   promptLabel: {
     ...typography.label,
-    color: colors.primaryLight,
-    marginBottom: 4,
+    color: colors.textMuted,
+    fontSize: 10,
+    marginBottom: 6,
   },
   promptText: {
     fontSize: 18,
     fontWeight: "700",
     color: colors.textPrimary,
-    textAlign: "center",
+    textAlign: "left",
   },
   actionWrap: {
     width: "100%",
@@ -459,23 +471,17 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
-  captureError: {
-    color: colors.danger,
-    textAlign: "center",
-    marginBottom: 12,
-    fontSize: 13,
-  },
   countdownPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    backgroundColor: colors.dangerBg,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    borderColor: "rgba(168, 50, 50, 0.25)",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: radii.full,
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   recDot: {
     width: 6,
@@ -487,31 +493,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: colors.danger,
+    letterSpacing: 0.5,
   },
   waveformBox: {
     width: "100%",
-    backgroundColor: colors.bgInput,
-    borderRadius: radii.lg,
-    paddingVertical: 14,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.md,
+    paddingVertical: 16,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    marginVertical: 10,
+    marginVertical: 12,
   },
   capturedWrap: {
     width: "100%",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   successPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    backgroundColor: colors.successBg,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)",
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    borderColor: "rgba(43, 97, 64, 0.25)",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: radii.full,
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   successText: {
     fontSize: 13,
@@ -529,31 +536,32 @@ const styles = StyleSheet.create({
   },
   nameConfirmBox: {
     width: "100%",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   readyCard: {
     alignItems: "center",
-    paddingVertical: 24,
+    paddingVertical: 28,
+    width: "100%",
   },
   readyCircle: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: "rgba(43, 97, 64, 0.25)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
   },
   readyTitle: {
-    ...typography.h2,
+    ...typography.h1,
     color: colors.textPrimary,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   readyDesc: {
     ...typography.body,
     color: colors.textMuted,
     textAlign: "center",
-    maxWidth: 340,
   },
 });
-

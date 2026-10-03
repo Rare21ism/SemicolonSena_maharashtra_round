@@ -67,18 +67,18 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     color: colors.textMuted,
-    letterSpacing: 0.8,
+    letterSpacing: 1.2,
   },
   qualityLabel: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.success,
   },
   track: {
-    height: 8,
-    backgroundColor: colors.bgInput,
+    height: 6,
+    backgroundColor: colors.bgSecondary,
     borderRadius: radii.full,
     overflow: "hidden",
     borderWidth: 1,
@@ -89,3 +89,4 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
 });
+

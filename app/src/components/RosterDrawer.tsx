@@ -104,17 +104,22 @@ export const RosterDrawer: React.FC<RosterDrawerProps> = ({
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    backgroundColor: "rgba(18, 19, 18, 0.4)",
     justifyContent: "flex-end",
   },
   bottomSheetWrapper: {
-    backgroundColor: colors.bgSecondary,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
+    backgroundColor: colors.bgCard,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    maxHeight: 460,
-    paddingBottom: 20,
+    maxHeight: 480,
+    paddingBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 4,
   },
   container: {
     padding: spacing.md,
@@ -135,20 +140,22 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   countBadge: {
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
+    backgroundColor: colors.successBg,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.3)",
+    borderColor: "rgba(43, 97, 64, 0.2)",
   },
   countText: {
     fontSize: 11,
     fontWeight: "700",
-    color: colors.primaryLight,
+    color: colors.success,
   },
   closeBtn: {
-    padding: 4,
+    padding: 6,
+    borderRadius: radii.sm,
+    backgroundColor: colors.bgSecondary,
   },
   subtitle: {
     fontSize: 12,
@@ -180,4 +187,5 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 });
+
 

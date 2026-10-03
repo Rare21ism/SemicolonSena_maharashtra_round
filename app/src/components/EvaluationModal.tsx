@@ -136,20 +136,25 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    backgroundColor: "rgba(18, 19, 18, 0.4)",
     justifyContent: "center",
     alignItems: "center",
     padding: spacing.md,
   },
   modalCard: {
     backgroundColor: colors.bgCard,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     width: "100%",
     maxWidth: 560,
     maxHeight: "85%",
     padding: spacing.lg,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   header: {
     flexDirection: "row",
@@ -165,8 +170,10 @@ const styles = StyleSheet.create({
   evalBadge: {
     width: 38,
     height: 38,
-    borderRadius: 10,
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
+    borderRadius: 8,
+    backgroundColor: colors.bgSecondary,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -180,7 +187,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   closeBtn: {
-    padding: 4,
+    padding: 6,
+    borderRadius: radii.sm,
+    backgroundColor: colors.bgSecondary,
   },
   bodyScroll: {
     flex: 1,
@@ -191,6 +200,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 14,
     marginBottom: 8,
+    letterSpacing: 1.5,
   },
   grid: {
     flexDirection: "row",
@@ -201,7 +211,7 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     minWidth: 120,
-    backgroundColor: colors.bgInput,
+    backgroundColor: colors.bgSecondary,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.borderDefault,
@@ -232,7 +242,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   list: {
-    backgroundColor: colors.bgInput,
+    backgroundColor: colors.bgSecondary,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.borderDefault,
@@ -258,3 +268,4 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
   },
 });
+

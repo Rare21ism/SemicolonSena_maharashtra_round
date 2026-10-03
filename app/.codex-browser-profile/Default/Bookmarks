@@ -1,0 +1,172 @@
+{
+   "checksum": "ef9eeb6e5888d80a699e86d2e05bad87",
+   "roots": {
+      "bookmark_bar": {
+         "children": [ {
+            "date_added": "13371575110866791",
+            "date_last_used": "0",
+            "guid": "5c7fda28-4549-4653-a036-09a77b8976b6",
+            "id": "10",
+            "name": "Data Structures - Basic Data Structures - Week 1 | Coursera",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://www.coursera.org/learn/data-structures/home/module/1",
+            "visit_count": 0
+         }, {
+            "date_added": "13370544559599566",
+            "date_last_used": "0",
+            "guid": "6010583a-2af2-4d53-8098-af0378fcbca9",
+            "id": "11",
+            "name": "Problems - LeetCode",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://leetcode.com/problemset/",
+            "visit_count": 0
+         }, {
+            "date_added": "13368452880825570",
+            "date_last_used": "0",
+            "guid": "b4360a37-6e0e-4e42-b876-f844bf6f0b0c",
+            "id": "12",
+            "name": "GitHub",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://github.com/",
+            "visit_count": 0
+         }, {
+            "date_added": "13369223306456954",
+            "date_last_used": "0",
+            "guid": "f83db531-00e3-4c47-88d7-eaacf47f1e67",
+            "id": "13",
+            "name": "III_SEMESTER_NEP_2023_IT.pdf",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://sbmp.ac.in/Common/Uploads/DMS/III_SEMESTER_NEP_2023_IT.pdf",
+            "visit_count": 0
+         }, {
+            "date_added": "13370808408879062",
+            "date_last_used": "0",
+            "guid": "8e0af2a5-95f0-467c-8326-cecf9a6b6936",
+            "id": "14",
+            "name": "ChatGPT",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://chatgpt.com/",
+            "visit_count": 0
+         }, {
+            "date_added": "13372344936057488",
+            "date_last_used": "0",
+            "guid": "4b17fc51-ed5e-4785-adce-0ee836dadb5b",
+            "id": "15",
+            "name": "Dashboard ‹ Ramesh Logic — WordPress",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "http://localhost/mywordpress/wp-admin/",
+            "visit_count": 0
+         }, {
+            "date_added": "13375459914886240",
+            "date_last_used": "0",
+            "guid": "93454de9-80ce-43fe-8c8c-82ad0e4a2365",
+            "id": "16",
+            "name": "QP_IT_WINTER 2023 (REG).pdf",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "file:///C:/Users/Jemish%20Koladiya/Downloads/QP_IT_WINTER%202023%20(REG).pdf",
+            "visit_count": 0
+         }, {
+            "date_added": "13375807478716937",
+            "date_last_used": "0",
+            "guid": "3e4de04e-05b8-4758-a6b1-43e3296b3457",
+            "id": "17",
+            "name": "IT_SUMMER-2024_Q_PAPERS.pdf",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://sbmp.ac.in/Common/Uploads/DMS/IT_SUMMER-2024_Q_PAPERS.pdf",
+            "visit_count": 0
+         }, {
+            "date_added": "13435541819724534",
+            "date_last_used": "0",
+            "guid": "f260c511-0657-4bf9-8e51-c86fd080b51c",
+            "id": "9",
+            "name": "Lenovo Support",
+            "show_icon": false,
+            "source": "oem_preload",
+            "type": "url",
+            "url": "https://support.lenovo.com/",
+            "visit_count": 0
+         }, {
+            "date_added": "13435541819724446",
+            "date_last_used": "0",
+            "guid": "048899a7-3b16-49ea-8231-22cfe7ddd411",
+            "id": "8",
+            "name": "Lenovo",
+            "show_icon": false,
+            "source": "oem_preload",
+            "type": "url",
+            "url": "https://www.lenovo.com/",
+            "visit_count": 0
+         }, {
+            "date_added": "13435541819724149",
+            "date_last_used": "0",
+            "guid": "cf2d415f-bcf2-4458-83a0-2eee62a82dca",
+            "id": "7",
+            "name": "McAfee",
+            "show_icon": false,
+            "source": "oem_preload",
+            "type": "url",
+            "url": "https://www.mcafee.com/consumer/v/browserfav/lenovo.html",
+            "visit_count": 0
+         } ],
+         "date_added": "13435541819601737",
+         "date_last_used": "0",
+         "date_modified": "13435541819724534",
+         "guid": "0bc5d13f-2cba-5d74-951f-3f233fe6c908",
+         "id": "1",
+         "name": "Favorites bar",
+         "source": "unknown",
+         "type": "folder"
+      },
+      "other": {
+         "children": [  ],
+         "date_added": "13435541819601737",
+         "date_last_used": "0",
+         "date_modified": "0",
+         "guid": "82b081ec-3dd3-529c-8475-ab6c344590dd",
+         "id": "2",
+         "name": "Other favorites",
+         "source": "unknown",
+         "type": "folder"
+      },
+      "synced": {
+         "children": [  ],
+         "date_added": "13435541819601737",
+         "date_last_used": "0",
+         "date_modified": "0",
+         "guid": "4cf2e351-0e85-532b-bb37-df045d8f8d0f",
+         "id": "3",
+         "name": "Mobile favorites",
+         "source": "unknown",
+         "type": "folder"
+      },
+      "workspaces_v2": {
+         "children": [  ],
+         "date_added": "13435541819601737",
+         "date_last_used": "0",
+         "date_modified": "0",
+         "guid": "75aa6670-344f-549d-b742-660f029506ab",
+         "id": "5",
+         "name": "Workspaces",
+         "source": "unknown",
+         "type": "folder"
+      }
+   },
+   "sync_metadata": "CkEKHgiIgQISCPQG+AOhAQAAKg4QABgBIAAoBTAAOABAABIAKhhaMnJCWnByR05zYVFSQ2RIYmExL3N3PT1IA6AGDBKMAQgFEocBChx3UkJyWkwrNlBBOWF2S2dqTlA3SlhETGNmdnM9EiQ5YjU5N2M3OC1jYTQ0LTVmM2UtYTE1MS02ODc5YTJiNDRlY2YYACAAKAAw3OK2vt0zOJ3ltr7dM0Cd5ba+3TNKHG5teDY1c1FEdnhJOFRnRWV2K0ErbnR0b1NuND1lAAAAAMI+AmAAEqwBCAsSpwEKHDhVRzRXWVNlaGgrdTVGUzRKVVdSN3RLM3phaz0SJDYwMTA1ODNhLTJhZjItNGQ1My04MDk4LWFmMDM3OGZjYmNhORgAIAAoADD9pN389TI44PqnuMEyQOD6p7jBMkocOXhRemV4aXpDSW14Z2pVQnQwekkzSnQ3YmZnPVoeIhx5ZTdha2crSEJuR0lJMld6NjkrNmtpeHV1bzQ9ZSr9ToLCPgJgBRKMAQgDEocBChxuamdEdTg4ZUNydlhwODZwRDdmSEdjcUZwODg9EiQ2NzcwNmU3ZS1kN2I2LTViNjAtYWIwYi1mN2ZhOTk4YWVkYzMYACAAKAAwmfvd+v8wOMb83fr/MEDG/N36/zBKHHl6TkIwMWNuNTRBN2NSVTB1VCsvUGdtVHRVbz1lAAAAAMI+AmAAEowBCAIShwEKHFljU1RvbnZFU1B3cUNzNEwyY3JWaHY2OEw5OD0SJDhlZDA2ZTg1LTJjMjEtNTJhNy05ZDk2LTM2YjhmY2NjODhmMxgAIAAoADCZ+936/zA4hPzd+v8wQIT83fr/MEocb1BWa2h3QlJiVjY1S0NXUjIrSU9OSFdvT3U4PWUAAAAAwj4CYAASrQEIEBKoAQocdlNVa0JBbFhXR1Z6a0FoMGx3NWh6WGZSRmtRPRIkOTM0NTRkZTktODBjZS00M2ZlLThjOGMtODJhZDBlNGEyMzY1GAAgACgAMMzzp7jBMjjZ+6e4wTJA2funuMEyShxBRGVRN0FzMFBIRnhXUkN5d3o4dk1WSE5Ocms9Wh8iHfs3cng1cENhVE5qWk96eFAzMUZ0aC8wc001V3c9ZXdwbKPCPgJgBRKtAQgOEqgBChxFdG1lUmMwODhYY09IZEIxOWN1SUdEREhud009EiQ4ZTBhZjJhNS05NWYwLTQ2N2MtODMyNi1jZWNmOWE2YjY5MzYYACAAKAAwzfOnuMEyOI/8p7jBMkCP/Ke4wTJKHGNwY3FsZHZMbkY4TXE2cWJxeDlZZzJ6MXB4cz1aHyId71hHL3o1NHRsUlRKWGNTYkd5ZmM2dlp5Rlc5VT1lC2CaR8I+AmAFEq0BCA0SqAEKHFdDeDlZU25hdXlibDN3SmFmWGhYOWJYUmdHQT0SJGY4M2RiNTMxLTAwZTMtNGM0Ny04OGQ3LWVhYWNmNDdmMWU2NxgAIAAoADDG86e4wTI4rPqnuMEyQKz6p7jBMkocZThlN010eStqeXJraXVKTEgrUW9sdEJMeFRNPVofIh3eLzV4bGw4cVFEK3Nwc2p3ZnFkU0Vyd09GT2xNPWUzgw8Ywj4CYAUSrQEIDBKoAQoccmdqdWpaTDN0cDVKS2VOODVDTXZQcG9IYzFJPRIkYjQzNjBhMzctNmUwZS00ZTQyLWI4NzYtZjg0NGJmNmYwYjBjGAAgACgAMMfzp7jBMjjH+qe4wTJAx/qnuMEyShxwUllvSXRIay92UStPdVkwRnB4anVQdWJ6N1k9Wh8iHbxhbHRJUEVkV1MvRTlqRzVVSzN1N2tuMFdEWjQ9Zfg6KyXCPgJgBRKMAQgBEocBChx5eEovNmZ2a2VjcjdrcDVFUXpCNHRXTHBkYkU9EiQzMWExMzhkMy03NDY4LTU1ODQtOTI5MS1jYzAxMWNlMDNiYTgYACAAKAAwmfvd+v8wOPT73fr/MED0+936/zBKHGFSQ1dMZ2hGOWI1SW5xS0lEdnVKL2p2UWtGYz1lAAAAAMI+AmAAEqwBCAoSpwEKHGJ2d2ZZdlFCM0pmdElwWGF6NW9NY3l5RDQvcz0SJDVjN2ZkYTI4LTQ1NDktNDY1My1hMDM2LTA5YTc3Yjg5NzZiNhgAIAAoADDK86e4wTI4lPunuMEyQJT7p7jBMkocVUZyZVRGT0UycGw3OWtRcFFLRDJHdVppTjNFPVoeIhwrMzNzQ2RoYnBORXRTZFFDQmR3eGkwT2VDOGc9ZZWNcobCPgJgBRKtAQgREqgBChx6K1pMUStCVEpPOURlWjdmRXg1VDBXRExrdEk9EiQzZTRkZTA0ZS0wNWI4LTQ3NTgtYTZiMS00M2UzMjk2YjM0NTcYACAAKAAwy/OnuMEyOLD7p7jBMkCw+6e4wTJKHFZaMHp6NjB4Z1hqR2tZRm9EcWRDM1d0ZTFtYz1aHyId/VU0bEdJWjZleHYrMHlMeWxYSEN6N0Q5QVI1ND1lM4MPGMI+AmAFEq0BCA8SqAEKHHBmRFp6L2ZDa2dUMGFaeENTWm5uOE1oa1haTT0SJDRiMTdmYzUxLWVkNWUtNDc4NS1hZGNlLTBlZTgzNmRhZGI1YhgAIAAoADDJ86e4wTI4+/qnuMEyQPv6p7jBMkocZmtvK1hIUzN5TGhPOWpMemFlcm15ckFnaUU4PVofIh33bGdZZW44NDYrNDgwYzRpSWo3N3ZzRVVFTm0wPWUbean5wj4CYAUwADgA",
+   "version": 1
+}

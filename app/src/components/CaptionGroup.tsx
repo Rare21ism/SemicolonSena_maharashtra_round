@@ -2,7 +2,6 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { colors, getSpeakerColor, radii, typography } from "../theme";
 import { ExtendedCaptionMessage } from "./CaptionLine";
-import { ParticipantAvatar } from "./ParticipantAvatar";
 
 interface CaptionGroupProps {
   speakerId: number | null;
@@ -42,73 +41,58 @@ export const CaptionGroup: React.FC<CaptionGroupProps> = React.memo(
         style={[
           styles.groupContainer,
           isCurrentSpeaker && styles.activeSpeakerGroup,
-          hasDraft && styles.groupDraft,
           hasOverlap && styles.groupOverlap,
         ]}
       >
-        {/* Left Avatar Column */}
-        <View style={styles.avatarCol}>
-          <ParticipantAvatar
-            name={resolvedName}
-            speakerId={speakerId}
-            color={resolvedColor}
-            isSpeaking={isCurrentSpeaker || hasDraft}
-            size={36}
-          />
+        {/* Speaker Editorial Header */}
+        <View style={styles.speakerHeader}>
+          <View style={styles.nameRow}>
+            <View style={[styles.speakerDot, { backgroundColor: resolvedColor }]} />
+            <Text style={[styles.speakerName, { color: resolvedColor }]}>
+              {resolvedName.toUpperCase()}
+            </Text>
+
+            {isCurrentSpeaker && (
+              <View style={styles.speakingBadge}>
+                <View style={[styles.speakingPulseDot, { backgroundColor: resolvedColor }]} />
+                <Text style={[styles.speakingBadgeText, { color: resolvedColor }]}>
+                  SPEAKING
+                </Text>
+              </View>
+            )}
+
+            {hasOverlap && (
+              <View style={styles.overlapTag}>
+                <Text style={styles.overlapTagText}>Simultaneous speech</Text>
+              </View>
+            )}
+          </View>
+
+          {captions[0]?.t_start ? (
+            <Text style={styles.timestamp}>
+              {formatTime(captions[0].t_start)}
+            </Text>
+          ) : null}
         </View>
 
-        {/* Right Content Area */}
-        <View style={styles.contentCol}>
-          {/* Speaker Header */}
-          <View style={styles.speakerHeader}>
-            <View style={styles.nameRow}>
-              <Text style={[styles.speakerName, { color: resolvedColor }]}>
-                {resolvedName}
-              </Text>
-
-              {hasOverlap && (
-                <View style={styles.overlapTag}>
-                  <Text style={styles.overlapTagText}>Simultaneous speech</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.metaRow}>
-              {hasDraft && (
-                <View style={styles.speakingIndicator}>
-                  <View style={styles.speakingDot} />
-                  <Text style={styles.speakingText}>Speaking</Text>
-                </View>
-              )}
-              {captions[0]?.t_start ? (
-                <Text style={styles.timestamp}>
-                  {formatTime(captions[0].t_start)}
+        {/* Flowing Caption Paragraph Text */}
+        <View style={styles.sentencesContainer}>
+          {captions.map((caption, idx) => {
+            const isLineDraft = caption.state === "draft";
+            return (
+              <View key={caption.line_id || idx} style={styles.sentenceRow}>
+                <Text
+                  style={[
+                    styles.captionText,
+                    isLineDraft ? styles.captionDraftText : styles.captionFinalText,
+                  ]}
+                >
+                  {caption.text}
+                  {isLineDraft && <Text style={styles.draftPulse}> ···</Text>}
                 </Text>
-              ) : null}
-            </View>
-          </View>
-
-          {/* Grouped Caption Lines */}
-          <View style={styles.sentencesContainer}>
-            {captions.map((caption, idx) => {
-              const isLineDraft = caption.state === "draft";
-              return (
-                <View key={caption.line_id || idx} style={styles.sentenceRow}>
-                  <Text
-                    style={[
-                      styles.captionText,
-                      isLineDraft ? styles.captionDraftText : styles.captionFinalText,
-                    ]}
-                  >
-                    {caption.text}
-                    {isLineDraft && (
-                      <Text style={styles.draftPulse}> ···</Text>
-                    )}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
+              </View>
+            );
+          })}
         </View>
       </View>
     );
@@ -117,112 +101,100 @@ export const CaptionGroup: React.FC<CaptionGroupProps> = React.memo(
 
 const styles = StyleSheet.create({
   groupContainer: {
-    flexDirection: "row",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: radii.lg,
-    marginVertical: 4,
-    backgroundColor: "rgba(23, 32, 51, 0.4)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    paddingVertical: 18,
+    paddingHorizontal: 0,
+    marginVertical: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: "transparent",
+    paddingLeft: 16,
   },
   activeSpeakerGroup: {
-    borderColor: "rgba(99, 102, 241, 0.3)",
-    backgroundColor: "rgba(23, 32, 51, 0.7)",
-  },
-  groupDraft: {
-    backgroundColor: "rgba(23, 32, 51, 0.5)",
+    borderLeftColor: colors.primary,
   },
   groupOverlap: {
-    borderColor: "rgba(239, 68, 68, 0.25)",
-    backgroundColor: "rgba(239, 68, 68, 0.05)",
-  },
-  avatarCol: {
-    marginRight: 14,
-    paddingTop: 2,
-    alignItems: "center",
-  },
-  contentCol: {
-    flex: 1,
-    justifyContent: "center",
+    borderLeftColor: colors.danger,
   },
   speakerHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
+  speakerDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
   speakerName: {
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: -0.2,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1.5,
   },
-  overlapTag: {
-    backgroundColor: "rgba(239, 68, 68, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radii.sm,
-  },
-  overlapTagText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.danger,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  speakingIndicator: {
+  speakingBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    backgroundColor: colors.bgSecondary,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: radii.sm,
   },
-  speakingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.success,
+  speakingPulseDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
-  speakingText: {
+  speakingBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  overlapTag: {
+    backgroundColor: colors.dangerBg,
+    borderWidth: 1,
+    borderColor: "rgba(168, 50, 50, 0.2)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+  },
+  overlapTagText: {
     fontSize: 10,
-    fontWeight: "600",
-    color: colors.success,
+    fontWeight: "700",
+    color: colors.danger,
   },
   timestamp: {
     fontSize: 11,
     color: colors.textMuted,
+    fontFamily: "monospace",
   },
   sentencesContainer: {
-    gap: 6,
+    gap: 8,
   },
   sentenceRow: {
-    marginVertical: 1,
+    marginVertical: 2,
   },
   captionText: {
-    ...typography.caption,
+    fontSize: 22,
+    lineHeight: 34,
+    letterSpacing: -0.2,
   },
   captionFinalText: {
     color: colors.textPrimary,
+    fontWeight: "500",
   },
   captionDraftText: {
-    color: "#CBD5E1",
-    opacity: 0.85,
+    color: colors.textMuted,
+    fontWeight: "400",
   },
   draftPulse: {
     color: colors.primaryLight,
     fontWeight: "600",
   },
 });
-

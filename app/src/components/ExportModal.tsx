@@ -183,20 +183,25 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    backgroundColor: "rgba(18, 19, 18, 0.4)",
     justifyContent: "center",
     alignItems: "center",
     padding: spacing.lg,
   },
   modalCard: {
     backgroundColor: colors.bgCard,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     width: "100%",
     maxWidth: 580,
     maxHeight: "85%",
     padding: spacing.lg,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   header: {
     flexDirection: "row",
@@ -214,11 +219,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   closeBtn: {
-    padding: 4,
+    padding: 6,
+    borderRadius: radii.sm,
+    backgroundColor: colors.bgSecondary,
   },
   tabRow: {
     flexDirection: "row",
-    backgroundColor: colors.bgInput,
+    backgroundColor: colors.bgSecondary,
     borderRadius: radii.md,
     padding: 3,
     marginBottom: spacing.md,
@@ -238,13 +245,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: colors.textMuted,
+    letterSpacing: 1,
   },
   tabTextActive: {
-    color: "#FFFFFF",
+    color: "#FBF9F5",
   },
   previewBox: {
     height: 220,
-    backgroundColor: colors.bgPrimary,
+    backgroundColor: colors.bgSecondary,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.borderDefault,
@@ -268,3 +276,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+

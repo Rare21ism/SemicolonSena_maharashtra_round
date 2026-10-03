@@ -1,6 +1,5 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import {
-  Animated,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -14,6 +13,7 @@ interface StatusBarProps {
   participantCount: number;
   onOpenRoster?: () => void;
   isMuted?: boolean;
+  micLevel?: number;
   onToggleMute?: () => void;
 }
 
@@ -22,33 +22,10 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   participantCount,
   onOpenRoster,
   isMuted = false,
+  micLevel = 0,
   onToggleMute,
 }) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    let anim: Animated.CompositeAnimation | null = null;
-    if (isListening && !isMuted) {
-      anim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 0.3,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      anim.start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-    return () => anim?.stop();
-  }, [isListening, isMuted, pulseAnim]);
+  const voiceDetected = micLevel >= 0.025;
 
   return (
     <View style={styles.container}>
@@ -71,17 +48,26 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         </TouchableOpacity>
 
         <View style={styles.listeningWrap}>
-          <Animated.View
+          <View
             style={[
               styles.pulseDot,
               {
-                backgroundColor: isMuted ? colors.danger : colors.success,
-                opacity: isMuted ? 1 : pulseAnim,
+                backgroundColor: isMuted
+                  ? colors.danger
+                  : voiceDetected
+                    ? colors.success
+                    : colors.textDim,
               },
             ]}
           />
           <Text style={styles.listeningText}>
-            {isMuted ? "Microphone muted" : "Listening…"}
+            {isMuted
+              ? "Microphone muted"
+              : voiceDetected
+                ? "Voice detected"
+                : isListening
+                  ? "Listening"
+                  : "Connecting"}
           </Text>
         </View>
       </View>
@@ -105,39 +91,45 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    height: 52,
+    height: 54,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: colors.bgCard,
     borderTopWidth: 1,
     borderTopColor: colors.borderDefault,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 3,
   },
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 16,
   },
   micBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: radii.md,
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    paddingHorizontal: 12,
+    borderRadius: radii.sm,
+    backgroundColor: colors.successBg,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)",
+    borderColor: "rgba(43, 97, 64, 0.2)",
   },
   micBtnMuted: {
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderColor: "rgba(239, 68, 68, 0.25)",
+    backgroundColor: colors.dangerBg,
+    borderColor: "rgba(168, 50, 50, 0.2)",
   },
   micBtnText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.success,
+    letterSpacing: 0.5,
   },
   micTextMuted: {
     color: colors.danger,
@@ -148,13 +140,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pulseDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   listeningText: {
-    fontSize: 13,
-    fontWeight: "500",
+    fontSize: 12,
+    fontWeight: "600",
     color: colors.textSecondary,
   },
   rightSection: {
@@ -165,17 +157,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: colors.bgCard,
+    backgroundColor: colors.bgSecondary,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: radii.md,
+    borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
   rosterBtnText: {
     fontSize: 12,
-    fontWeight: "600",
-    color: colors.textSecondary,
+    fontWeight: "700",
+    color: colors.textPrimary,
   },
 });
+
 

@@ -53,9 +53,9 @@ export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({ status }) => {
       case "connecting":
         return "Connecting…";
       case "reconnecting":
-        return "Reconnecting…";
+        return "Getting you back in…";
       default:
-        return "Connection lost";
+        return "Lost connection";
     }
   };
 
@@ -80,22 +80,29 @@ const styles = StyleSheet.create({
   badgeContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     borderRadius: radii.full,
     paddingHorizontal: 10,
     paddingVertical: 4,
     gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
 });
+
 

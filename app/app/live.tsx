@@ -21,6 +21,7 @@ export default function LiveScreen() {
     status,
     roster,
     captions,
+    micLevel,
     myDeviceIdx,
     activeSpeakerId,
     overlappingCount,
@@ -49,9 +50,11 @@ export default function LiveScreen() {
     <SafeAreaView style={styles.safeArea}>
       <Toast message={toastMessage} onDismiss={clearToast} />
 
-      {/* Top Header */}
+      {/* Top Editorial Header */}
       <View style={styles.header}>
         <View style={styles.roomInfo}>
+          <Text style={styles.roomBrandLabel}>ROUNDTABLE</Text>
+          <View style={styles.headerDivider} />
           <Text style={styles.roomTitle} numberOfLines={1}>
             {sessionName || "Group Discussion"}
           </Text>
@@ -63,13 +66,13 @@ export default function LiveScreen() {
         <View style={styles.headerRight}>
           <ConnectionBadge status={status} />
 
-          <TouchableOpacity style={styles.leaveBtn} onPress={handleLeave}>
+          <TouchableOpacity style={styles.leaveBtn} onPress={handleLeave} activeOpacity={0.8}>
             <Text style={styles.leaveBtnText}>Leave</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Participant Presence Strip */}
+      {/* Spatial Participant Presence Strip */}
       <View style={styles.participantStrip}>
         <ScrollView
           horizontal
@@ -104,6 +107,7 @@ export default function LiveScreen() {
           roster={roster}
           activeSpeakerId={activeSpeakerId}
           overlappingCount={overlappingCount}
+          micLevel={micLevel}
         />
       </View>
 
@@ -120,6 +124,7 @@ export default function LiveScreen() {
       <StatusBar
         isListening={status === "connected"}
         participantCount={roster.length}
+        micLevel={micLevel}
         onOpenRoster={() => setRosterOpen(true)}
         isMuted={isMuted}
         onToggleMute={toggleMute}
@@ -138,26 +143,42 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    backgroundColor: colors.bgSecondary,
+    paddingHorizontal: 20,
+    backgroundColor: colors.bgCard,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderDefault,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   roomInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     flex: 1,
     marginRight: 12,
   },
+  roomBrandLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.primary,
+    letterSpacing: 2,
+  },
+  headerDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: colors.borderDefault,
+  },
   roomTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
     color: colors.textPrimary,
-    maxWidth: 200,
+    maxWidth: 220,
   },
   codeTag: {
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    backgroundColor: colors.bgSecondary,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: radii.sm,
@@ -166,36 +187,38 @@ const styles = StyleSheet.create({
   },
   codeTagText: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.textMuted,
     fontFamily: "monospace",
+    letterSpacing: 0.5,
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
   leaveBtn: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: radii.md,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderRadius: radii.sm,
+    backgroundColor: colors.dangerBg,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.25)",
+    borderColor: "rgba(168, 50, 50, 0.2)",
   },
   leaveBtnText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.danger,
+    letterSpacing: 0.5,
   },
   participantStrip: {
-    backgroundColor: "rgba(17, 23, 38, 0.6)",
+    backgroundColor: colors.bgSecondary,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
     paddingVertical: 8,
   },
   participantScroll: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     gap: 8,
     alignItems: "center",
   },
@@ -204,4 +227,3 @@ const styles = StyleSheet.create({
     width: "100%",
   },
 });
-
