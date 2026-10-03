@@ -10,6 +10,7 @@ import logging
 import time
 from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketDisconnected
 
 from roundtable.protocol import (
     CaptionMessage,
@@ -125,10 +126,13 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
                     except Exception as e:
                         logger.warning(f"Failed to broadcast caption from client: {e}")
 
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, WebSocketDisconnected):
         logger.info(f"WebSocket disconnected for session {session.code}")
     except Exception as e:
-        logger.error(f"WebSocket error in session {session.code}: {e}", exc_info=True)
+        if "disconnect" in str(e).lower():
+            logger.info(f"WebSocket disconnected for session {session.code}")
+        else:
+            logger.error(f"WebSocket error in session {session.code}: {e}", exc_info=True)
     finally:
         if device:
             await session.disconnect_device(device.device_idx)

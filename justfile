@@ -11,9 +11,9 @@ default:
 dev-server:
     cd server; python -m uv run uvicorn roundtable.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Start Expo universal app development server
+# Start Expo universal app development server for Expo Go
 dev-app:
-    npm --workspace=app run start
+    npm --workspace=app run start -- --go -c
 
 # Launch Roundtable app in the web browser
 dev-web:
@@ -21,9 +21,9 @@ dev-web:
 
 alias web-dev := dev-web
 
-# Start Expo dev server with cloud tunnel for remote mobile testing
+# Start Expo dev server with cloud tunnel for remote mobile testing in Expo Go
 tunnel:
-    npx expo start app --tunnel
+    npm --workspace=app run start -- --tunnel --go -c
 
 # Run full test suite (TypeScript protocol tests + Python backend tests)
 test:

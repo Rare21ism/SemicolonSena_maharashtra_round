@@ -7,8 +7,7 @@
     "userInterfaceStyle": "dark",
     "scheme": "roundtable",
     "ios": {
-      "supportsTablet": true,
-      "deploymentTarget": "16.4"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {

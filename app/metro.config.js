@@ -7,11 +7,12 @@ const monorepoRoot = path.resolve(projectRoot, "..");
 
 const config = getDefaultConfig(projectRoot);
 
-// 1. Watch all files in monorepo
-config.watchFolders = [monorepoRoot];
+// 1. Watch all files in monorepo preserving defaults
+config.watchFolders = [...(config.watchFolders || []), monorepoRoot];
 
 // 2. Let Metro resolve packages in app and monorepo root
 config.resolver.nodeModulesPaths = [
+  ...(config.resolver.nodeModulesPaths || []),
   path.resolve(projectRoot, "node_modules"),
   path.resolve(monorepoRoot, "node_modules"),
 ];

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
+    "@expo/ngrok": "^4.1.0",
     "@expo/vector-icons": "^15.0.2",
     "@roundtable/protocol": "*",
     "expo": "^57.0.0",
@@ -30,6 +31,7 @@
     "@babel/core": "^7.25.2",
     "@types/react": "~19.2.4",
     "nativewind": "^4.2.7",
+    "react-native-css-interop": "^0.2.7",
     "react-native-reanimated": "4.5.1",
     "tailwindcss": "^3.4.19",
     "typescript": "~6.0.3"
