@@ -16,5 +16,9 @@
   },
   "devDependencies": {
     "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "just": "^0.1.8",
+    "query-string": "^9.5.1"
   }
 }

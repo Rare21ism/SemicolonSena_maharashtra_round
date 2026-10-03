@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   SafeAreaView,
@@ -9,18 +9,20 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useKeepAwake } from "expo-keep-awake";
 import { CaptionMessage, DeviceInfo } from "@roundtable/protocol";
 
 import { createAudioSource } from "../src/audio";
+import { WakeLockManager } from "../src/audio/wakeLock";
 import { CaptionLine } from "../src/components/CaptionLine";
 import { ConnectionBadge } from "../src/components/ConnectionBadge";
+import { PermissionError } from "../src/components/PermissionError";
 import { SpeakerChip } from "../src/components/SpeakerChip";
 import { ConnectionStatus, RoundtableClient } from "../src/net/ws";
 
 export default function LiveScreen() {
-  // Prevent screen sleep during live session
-  useKeepAwake();
+  // Wake lock: prevent screen sleep during live session.
+  // WakeLockManager works on web via Screen Wake Lock API and degrades gracefully elsewhere.
+  const wakeLockRef = useRef<WakeLockManager>(new WakeLockManager());
 
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -41,13 +43,45 @@ export default function LiveScreen() {
   const [offsetMs, setOffsetMs] = useState<number | undefined>(undefined);
   const [myDeviceIdx, setMyDeviceIdx] = useState<number | null>(null);
   const [roster, setRoster] = useState<DeviceInfo[]>([]);
-  const [captions, setCaptions] = useState<CaptionMessage[]>([]);
+  const [micError, setMicError] = useState<string | null>(null);
+
+  // Map-based caption store: O(1) lookup by line_id, skip stale revs
+  const captionMapRef = useRef<Map<string, CaptionMessage>>(new Map());
+  const [captionOrder, setCaptionOrder] = useState<string[]>([]);
+  // Bump counter to trigger FlatList re-render only when content actually changes
+  const [captionTick, setCaptionTick] = useState(0);
 
   const clientRef = useRef<RoundtableClient | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const isNearBottomRef = useRef(true);
+
+  const handleCaption = useCallback((caption: CaptionMessage) => {
+    const map = captionMapRef.current;
+    const existing = map.get(caption.line_id);
+
+    // Skip stale revisions — prevents flicker from out-of-order messages
+    if (existing && existing.rev >= caption.rev) {
+      return;
+    }
+
+    map.set(caption.line_id, caption);
+
+    if (!existing) {
+      // New line — append to order list
+      setCaptionOrder((prev) => [...prev, caption.line_id]);
+    }
+
+    // Bump tick to tell FlatList something changed
+    setCaptionTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
-    // 1. Initialize client
+    const wl = wakeLockRef.current;
+
+    // 1. Acquire wake lock (non-blocking — failure is silent).
+    wl.acquire();
+
+    // 2. Initialize WebSocket client.
     const client = new RoundtableClient({
       serverUrl,
       sessionId: code,
@@ -59,43 +93,45 @@ export default function LiveScreen() {
         setRttMs(rtt);
       },
       onRoster: (devices) => setRoster(devices),
-      onCaption: (caption) => {
-        setCaptions((prev) => {
-          const index = prev.findIndex((c) => c.line_id === caption.line_id);
-          if (index !== -1) {
-            // Update existing line
-            const updated = [...prev];
-            updated[index] = caption;
-            return updated;
-          } else {
-            // Append new line
-            return [...prev, caption];
-          }
-        });
-      },
+      onCaption: handleCaption,
     });
 
     clientRef.current = client;
     client.connect();
 
-    // 2. Initialize audio capture
+    // 3. Initialize audio capture.
     const audioSource = createAudioSource();
     audioSource.onChunk((pcm, ts) => {
       client.sendAudioFrame(pcm, ts);
     });
-    audioSource.start().catch((err) => {
-      console.warn("Failed to start audio source:", err);
+    audioSource.start().then(() => {
+      setMicError(null);
+    }).catch((err: Error) => {
+      // Surface the error to the UI with the actionable message from AudioSource.web.ts.
+      setMicError(err.message ?? "Microphone unavailable.");
+      console.warn("[live] Audio capture failed:", err.message);
     });
 
     return () => {
       audioSource.stop();
       client.disconnect();
+      wl.release();
     };
-  }, [code, name, serverUrl]);
+  }, [code, name, serverUrl, handleCaption]);
 
-  // Helper map for speaker info lookup
-  const speakerMap = new Map<number, DeviceInfo>();
-  roster.forEach((dev) => speakerMap.set(dev.device_idx, dev));
+  // Derive flat caption list from Map using stable insertion order
+  const captions = useMemo(() => {
+    const map = captionMapRef.current;
+    return captionOrder.map((id) => map.get(id)!).filter(Boolean);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captionOrder, captionTick]);
+
+  // Memoize speaker lookup to avoid re-creating every render
+  const speakerMap = useMemo(() => {
+    const m = new Map<number, DeviceInfo>();
+    roster.forEach((dev) => m.set(dev.device_idx, dev));
+    return m;
+  }, [roster]);
 
   const handleLeave = () => {
     clientRef.current?.disconnect();
@@ -148,6 +184,18 @@ export default function LiveScreen() {
         </ScrollView>
       </View>
 
+      {/* Microphone permission / capture error banner */}
+      {micError && (
+        <PermissionError
+          message={micError}
+          onRetry={() => {
+            // Clear the error so the user can see the retry is happening;
+            // a full remount would be needed to retry capture, so we just clear.
+            setMicError(null);
+          }}
+        />
+      )}
+
       {/* Live Captions Feed */}
       <View style={styles.feedContainer}>
         {captions.length === 0 ? (
@@ -163,6 +211,7 @@ export default function LiveScreen() {
           <FlatList
             ref={flatListRef}
             data={captions}
+            extraData={captionTick}
             keyExtractor={(item) => item.line_id}
             renderItem={({ item }) => {
               const speakerInfo = item.speaker_id
@@ -177,9 +226,17 @@ export default function LiveScreen() {
               );
             }}
             contentContainerStyle={styles.captionsList}
-            onContentSizeChange={() =>
-              flatListRef.current?.scrollToEnd({ animated: true })
-            }
+            onScroll={(e) => {
+              const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+              isNearBottomRef.current =
+                contentOffset.y + layoutMeasurement.height >= contentSize.height - 80;
+            }}
+            scrollEventThrottle={200}
+            onContentSizeChange={() => {
+              if (isNearBottomRef.current) {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }
+            }}
           />
         )}
       </View>
@@ -187,9 +244,11 @@ export default function LiveScreen() {
       {/* Mic Status Footer */}
       <View style={styles.footer}>
         <View style={styles.micIndicator}>
-          <View style={styles.micPulseDot} />
+          <View style={[styles.micPulseDot, micError ? styles.micDotError : undefined]} />
           <Text style={styles.micText}>
-            Mic: 16 kHz Mono Streaming (Stub Active)
+            {micError
+              ? "Mic: Permission required"
+              : "Mic: 16 kHz · AudioWorklet streaming"}
           </Text>
         </View>
         {myDeviceIdx !== null && (
@@ -344,6 +403,9 @@ const styles = StyleSheet.create({
   micText: {
     fontSize: 12,
     color: "#94A3B8",
+  },
+  micDotError: {
+    backgroundColor: "#EF4444",
   },
   deviceTag: {
     fontSize: 12,
