@@ -10,7 +10,7 @@ Get the end-to-end loop running in seconds:
 
 ```bash
 # 1. Install dependencies
-npm install && cd server && uv sync --dev && cd ..
+npm install; cd server; uv sync --dev; cd ..
 
 # 2. Start the FastAPI backend server (port 8000)
 just dev-server
