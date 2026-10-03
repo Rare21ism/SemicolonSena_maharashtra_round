@@ -16,3 +16,5 @@ When ready, implement `RealPipeline(Pipeline)` in this package and toggle the en
 export ROUNDTABLE_PIPELINE=real
 ```
 (Default is `mock`).
+
+ML only. Never block the event loop. Mock pipeline must keep working. Tune thresholds via config, not magic numbers. Don't add GCC-PHAT, embeddings, or separation models unless asked.

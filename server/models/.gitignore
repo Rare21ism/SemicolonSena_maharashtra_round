@@ -1,0 +1,4 @@
+# Ignore all downloaded models and subdirectories
+*
+*/
+!.gitignore
