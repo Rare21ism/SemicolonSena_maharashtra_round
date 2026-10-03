@@ -8,6 +8,7 @@
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "allowArbitraryExtensions": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@roundtable/protocol": [

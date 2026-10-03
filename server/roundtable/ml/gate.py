@@ -26,10 +26,10 @@ logger = logging.getLogger("roundtable.ml.gate")
 @dataclass
 class GateConfig:
     """Configurable thresholds for audio gating and speaker attribution."""
-    threshold_open_db: float = float(os.getenv("GATE_THRESHOLD_OPEN_DB", "8.0"))
-    margin_db: float = float(os.getenv("GATE_MARGIN_DB", "3.0"))
-    hold_ms: float = float(os.getenv("GATE_HOLD_MS", "400.0"))
-    min_on_ms: float = float(os.getenv("GATE_MIN_ON_MS", "150.0"))
+    threshold_open_db: float = float(os.getenv("GATE_THRESHOLD_OPEN_DB", "1.5"))
+    margin_db: float = float(os.getenv("GATE_MARGIN_DB", "1.5"))
+    hold_ms: float = float(os.getenv("GATE_HOLD_MS", "500.0"))
+    min_on_ms: float = float(os.getenv("GATE_MIN_ON_MS", "0.0"))
     noise_floor_window_s: float = float(os.getenv("GATE_NOISE_FLOOR_WINDOW_S", "5.0"))
     noise_floor_percentile: float = float(os.getenv("GATE_NOISE_FLOOR_PERCENTILE", "15.0"))
     jitter_hold_back_ms: float = float(os.getenv("GATE_JITTER_HOLD_BACK_MS", "300.0"))
@@ -110,7 +110,14 @@ class AudioGate:
         dominant_device: Optional[int] = None
         overlap_candidate = False
 
-        if len(active_candidates) == 1:
+        if len(device_pcms) == 1:
+            dev = next(iter(device_pcms.keys()))
+            m = metrics_by_dev[dev]
+            # Single-device session: always pass audio through to ASR unless completely zero
+            if m.level_dbfs > -70.0 or m.snr_db > 0.0:
+                dominant_device = dev
+                qualifying_devices.add(dev)
+        elif len(active_candidates) == 1:
             dominant_device = active_candidates[0][0]
             qualifying_devices.add(dominant_device)
         elif len(active_candidates) >= 2:
