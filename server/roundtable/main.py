@@ -72,7 +72,7 @@ async def create_session():
 async def query_session(code: str):
     session = session_manager.get_session(code)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        session = await session_manager.create_or_get_session(code)
     return SessionQueryResponse(
         session_id=session.session_id,
         code=session.code,

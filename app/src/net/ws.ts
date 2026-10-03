@@ -213,7 +213,17 @@ export class RoundtableClient {
       pcm,
     });
 
-    this.ws.send(frameBytes.buffer);
+    this.ws.send(frameBytes.buffer as ArrayBuffer);
+  }
+
+  /**
+   * Broadcasts a real-time speech caption to all participants in the session.
+   */
+  public sendCaption(caption: CaptionMessage): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    this.ws.send(JSON.stringify(caption));
   }
 
   public disconnect(): void {
