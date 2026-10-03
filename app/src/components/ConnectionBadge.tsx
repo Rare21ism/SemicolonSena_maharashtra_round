@@ -5,15 +5,9 @@ import { ConnectionStatus } from "../net/ws";
 
 interface ConnectionBadgeProps {
   status: ConnectionStatus;
-  rttMs?: number;
-  offsetMs?: number;
 }
 
-export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({
-  status,
-  rttMs,
-  offsetMs,
-}) => {
+export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({ status }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -23,12 +17,12 @@ export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({
         Animated.sequence([
           Animated.timing(pulseAnim, {
             toValue: 0.3,
-            duration: 500,
+            duration: 600,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 500,
+            duration: 600,
             useNativeDriver: true,
           }),
         ])
@@ -55,13 +49,13 @@ export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({
   const getStatusLabel = () => {
     switch (status) {
       case "connected":
-        return "LIVE";
+        return "Connected";
       case "connecting":
-        return "CONNECTING";
+        return "Connecting…";
       case "reconnecting":
-        return "RECONNECTING";
+        return "Reconnecting…";
       default:
-        return "OFFLINE";
+        return "Connection lost";
     }
   };
 
@@ -78,14 +72,6 @@ export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({
       <Text style={[styles.statusText, { color: dotColor }]}>
         {getStatusLabel()}
       </Text>
-      {status === "connected" && typeof rttMs === "number" && rttMs > 0 && (
-        <Text style={styles.metricsText}>
-          {Math.round(rttMs)}ms
-          {typeof offsetMs === "number" && Math.abs(offsetMs) > 0
-            ? ` · Δ${Math.round(offsetMs)}ms`
-            : ""}
-        </Text>
-      )}
     </View>
   );
 };
@@ -94,7 +80,7 @@ const styles = StyleSheet.create({
   badgeContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(13, 19, 34, 0.85)",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderWidth: 1,
     borderColor: colors.borderDefault,
     borderRadius: radii.full,
@@ -108,14 +94,8 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
   },
   statusText: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-  metricsText: {
-    fontSize: 10,
-    color: colors.textMuted,
-    fontFamily: "monospace",
-    marginLeft: 2,
+    fontSize: 12,
+    fontWeight: "600",
   },
 });
+

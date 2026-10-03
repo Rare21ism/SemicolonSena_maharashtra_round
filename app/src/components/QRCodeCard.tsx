@@ -1,14 +1,12 @@
 import React, { useState } from "react";
 import {
   Clipboard,
-  Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radii, spacing, typography } from "../theme";
+import { colors, radii, spacing } from "../theme";
 import { Button } from "./Button";
 
 interface QRCodeCardProps {
@@ -63,9 +61,9 @@ export const QRCodeCard: React.FC<QRCodeCardProps> = ({
         </View>
       )}
 
-      {/* Prominent Session Code Box */}
+      {/* Prominent Room Code Box */}
       <View style={styles.codeContainer}>
-        <Text style={styles.codeLabel}>SESSION CODE</Text>
+        <Text style={styles.codeLabel}>ROOM CODE</Text>
         <Text style={styles.codeText}>{code}</Text>
       </View>
 
@@ -96,7 +94,7 @@ export const QRCodeCard: React.FC<QRCodeCardProps> = ({
       {/* Action Buttons */}
       <View style={styles.actionRow}>
         <Button
-          title={copied ? "Copied to clipboard!" : "Copy Session Code"}
+          title={copied ? "Copied to clipboard!" : "Copy Room Code"}
           variant={copied ? "secondary" : "primary"}
           size="sm"
           icon={
@@ -122,11 +120,6 @@ const styles = StyleSheet.create({
     borderColor: colors.borderDefault,
     padding: spacing.lg,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
   },
   header: {
     alignItems: "center",
@@ -146,9 +139,9 @@ const styles = StyleSheet.create({
   },
   codeContainer: {
     alignItems: "center",
-    backgroundColor: "rgba(99, 102, 241, 0.1)",
-    borderWidth: 1.5,
-    borderColor: "rgba(99, 102, 241, 0.4)",
+    backgroundColor: "rgba(99, 102, 241, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(99, 102, 241, 0.3)",
     borderRadius: radii.lg,
     paddingVertical: 10,
     paddingHorizontal: 28,
@@ -156,14 +149,14 @@ const styles = StyleSheet.create({
   },
   codeLabel: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.primaryLight,
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
     marginBottom: 2,
   },
   codeText: {
     fontSize: 32,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.textPrimary,
     fontFamily: "monospace",
     letterSpacing: 4,
@@ -173,10 +166,6 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: "#FFFFFF",
     borderRadius: radii.lg,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     marginVertical: spacing.sm,
@@ -216,7 +205,7 @@ const styles = StyleSheet.create({
   },
   qrCenterText: {
     color: "#FFFFFF",
-    fontWeight: "900",
+    fontWeight: "800",
     fontSize: 12,
     letterSpacing: 0.5,
   },
@@ -233,3 +222,4 @@ const styles = StyleSheet.create({
     width: "100%",
   },
 });
+

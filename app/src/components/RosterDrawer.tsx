@@ -1,7 +1,6 @@
 import React from "react";
 import {
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,115 +15,93 @@ import { ParticipantCard } from "./ParticipantCard";
 interface RosterDrawerProps {
   visible: boolean;
   onClose: () => void;
-  devices: DeviceInfo[];
+  roster: DeviceInfo[];
   myDeviceIdx: number | null;
   activeSpeakerId?: number | null;
-  isMobile?: boolean;
 }
 
 export const RosterDrawer: React.FC<RosterDrawerProps> = ({
   visible,
   onClose,
-  devices,
+  roster,
   myDeviceIdx,
   activeSpeakerId,
-  isMobile = false,
 }) => {
-  const content = (
-    <View style={[styles.container, isMobile ? styles.containerMobile : styles.containerDesktop]}>
-      {/* Drawer Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <Text style={styles.title}>PARTICIPANTS</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{devices.length}</Text>
-          </View>
-        </View>
-
-        {isMobile && (
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <Text style={styles.subtitle}>
-        Microphones active in the ad-hoc array
-      </Text>
-
-      {/* Participant List */}
-      <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
-        {devices.map((device) => {
-          const isSelf = device.device_idx === myDeviceIdx;
-          const isSpeaking = device.device_idx === activeSpeakerId;
-
-          return (
-            <ParticipantCard
-              key={device.device_idx}
-              device={device}
-              isSelf={isSelf}
-              isSpeaking={isSpeaking}
-              statusText={isSpeaking ? "Speaking" : "Listening"}
-              connectionQuality="good"
-            />
-          );
-        })}
-
-        {devices.length === 0 && (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>Waiting for devices to join...</Text>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Bottom Summary / Mic Info */}
-      <View style={styles.footerNote}>
-        <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
-        <Text style={styles.footerText}>
-          Coordinated array active · 16 kHz PCM
-        </Text>
-      </View>
-    </View>
-  );
-
-  if (isMobile) {
-    return (
-      <Modal
-        visible={visible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={onClose}
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity
+        style={styles.modalBackdrop}
+        activeOpacity={1}
+        onPress={onClose}
       >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.bottomSheetWrapper}>
-            {content}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-    );
-  }
+        <TouchableOpacity activeOpacity={1} style={styles.bottomSheetWrapper}>
+          <View style={styles.container}>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.headerTitleRow}>
+                <Text style={styles.title}>PEOPLE HERE</Text>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countText}>{roster.length}</Text>
+                </View>
+              </View>
 
-  // Desktop side panel
-  if (!visible) return null;
-  return <View style={styles.desktopPanelWrapper}>{content}</View>;
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={onClose}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.subtitle}>
+              People currently connected in this conversation
+            </Text>
+
+            {/* Participant List */}
+            <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
+              {roster.map((device) => {
+                const isSelf = device.device_idx === myDeviceIdx;
+                const isSpeaking = device.device_idx === activeSpeakerId;
+
+                return (
+                  <ParticipantCard
+                    key={device.device_idx}
+                    device={device}
+                    isSelf={isSelf}
+                    isSpeaking={isSpeaking}
+                    statusText={isSpeaking ? "Speaking" : "Connected"}
+                    connectionQuality="good"
+                  />
+                );
+              })}
+
+              {roster.length === 0 && (
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyText}>Waiting for people to join…</Text>
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.footerNote}>
+              <Ionicons name="checkmark-circle-outline" size={14} color={colors.success} />
+              <Text style={styles.footerText}>
+                Microphones active & contributing
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
 };
 
 const styles = StyleSheet.create({
-  desktopPanelWrapper: {
-    width: 320,
-    borderLeftWidth: 1,
-    borderLeftColor: colors.borderDefault,
-    backgroundColor: colors.bgSecondary,
-    height: "100%",
-  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.65)",
@@ -136,19 +113,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radii.xl,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    maxHeight: "80%",
-    paddingBottom: 24,
+    maxHeight: 460,
+    paddingBottom: 20,
   },
   container: {
-    flex: 1,
     padding: spacing.md,
-  },
-  containerMobile: {
-    flex: 0,
-    maxHeight: 480,
-  },
-  containerDesktop: {
-    height: "100%",
   },
   header: {
     flexDirection: "row",
@@ -166,16 +135,16 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   countBadge: {
-    backgroundColor: "rgba(99, 102, 241, 0.2)",
+    backgroundColor: "rgba(99, 102, 241, 0.15)",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.4)",
+    borderColor: "rgba(99, 102, 241, 0.3)",
   },
   countText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.primaryLight,
   },
   closeBtn: {
@@ -187,7 +156,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   scrollArea: {
-    flex: 1,
+    maxHeight: 300,
   },
   emptyWrap: {
     padding: spacing.lg,
@@ -196,7 +165,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     color: colors.textMuted,
-    fontStyle: "italic",
   },
   footerNote: {
     flexDirection: "row",
@@ -212,3 +180,4 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 });
+

@@ -44,11 +44,13 @@ class RealPipeline:
         self._closed = False
         self.enable_whisper = enable_whisper
 
-        # Gating enabled by default unless env ROUNDTABLE_GATING=off
+        # Direct streaming is the reliable default for one active mic. Enable
+        # adaptive multi-device gating explicitly once a room has calibrated its
+        # background noise floor.
         if enable_gating is not None:
             self.enable_gating = enable_gating
         else:
-            self.enable_gating = os.getenv("ROUNDTABLE_GATING", "on").lower() not in ("off", "false", "0")
+            self.enable_gating = os.getenv("ROUNDTABLE_GATING", "off").lower() in ("on", "true", "1")
 
         self.gate_config = gate_config if gate_config is not None else GateConfig()
         self.stats = stats if stats is not None else PipelineLatencyStats()

@@ -36,11 +36,11 @@ export default function CreateMeetingScreen() {
     setLoading(true);
     setError(null);
     try {
-      await createSessionOnBackend(sessionName || "Team Discussion");
+      await createSessionOnBackend(sessionName || "Group Discussion");
       setIsHost(true);
       setCreated(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not create the meeting.");
+      setError(cause instanceof Error ? cause.message : "Could not start the conversation.");
     } finally {
       setLoading(false);
     }
@@ -69,25 +69,25 @@ export default function CreateMeetingScreen() {
             >
               <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Create a meeting</Text>
+            <Text style={styles.headerTitle}>Start a conversation</Text>
             <View style={{ width: 32 }} />
           </View>
 
           {!created ? (
             <View style={styles.formCard}>
               <View style={styles.iconCircle}>
-                <Ionicons name="chatbubbles" size={24} color={colors.primary} />
+                <Ionicons name="chatbubbles-outline" size={24} color={colors.primary} />
               </View>
 
-              <Text style={styles.cardTitle}>Create a meeting</Text>
+              <Text style={styles.cardTitle}>New conversation</Text>
               <Text style={styles.cardDesc}>
-                Start a shared meeting session. Everyone nearby can connect
-                their phone or laptop to contribute audio to the live transcript.
+                Create a room. Anyone with the code can join with their phone or laptop
+                to contribute to the live transcript.
               </Text>
 
               <Input
-                label="MEETING NAME"
-                placeholder="e.g. Team Discussion"
+                label="CONVERSATION NAME"
+                placeholder="e.g. Weekly Sync"
                 value={sessionName}
                 onChangeText={setSessionName}
                 icon={
@@ -99,30 +99,14 @@ export default function CreateMeetingScreen() {
                 }
               />
 
-              <Input
-                label="HOST NAME"
-                value={name}
-                editable={false}
-                helper="Configured on home page"
-                icon={
-                  <Ionicons
-                    name="person-outline"
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                }
-              />
-
               {error && <Text style={styles.errorText}>{error}</Text>}
 
               <Button
-                title="Create Meeting"
+                title="Create Room"
                 variant="primary"
                 size="lg"
                 loading={loading}
-                icon={
-                  <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-                }
+                icon={<Ionicons name="add" size={20} color="#FFFFFF" />}
                 onPress={handleCreate}
                 style={styles.createBtn}
               />
@@ -132,14 +116,13 @@ export default function CreateMeetingScreen() {
               {/* QR Code and Code Card */}
               <QRCodeCard
                 code={sessionCode}
-                sessionName={sessionName || "Team Discussion"}
+                sessionName={sessionName || "Group Discussion"}
               />
 
-              {/* Participants Counter */}
               <View style={styles.participantPill}>
                 <View style={styles.onlineDot} />
                 <Text style={styles.participantText}>
-                Share the meeting code to invite participants.
+                  Share this code with everyone participating.
                 </Text>
               </View>
 
@@ -160,7 +143,7 @@ export default function CreateMeetingScreen() {
                 />
 
                 <Button
-                  title="Cancel"
+                  title="Back"
                   variant="ghost"
                   size="md"
                   onPress={() => setCreated(false)}
@@ -178,7 +161,8 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     textAlign: "center",
-    marginTop: 12,
+    marginTop: 8,
+    marginBottom: 8,
   },
   safeArea: {
     flex: 1,
@@ -189,9 +173,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 24,
     paddingBottom: 48,
-    maxWidth: 580,
+    maxWidth: 540,
     width: "100%",
     alignSelf: "center",
   },
@@ -219,10 +203,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(99, 102, 241, 0.12)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -237,7 +221,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: colors.textMuted,
     marginBottom: 24,
-    maxWidth: 420,
+    maxWidth: 400,
   },
   createBtn: {
     width: "100%",
@@ -250,9 +234,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.3)",
+    borderColor: "rgba(16, 185, 129, 0.25)",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: radii.full,
@@ -260,14 +244,14 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   onlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.success,
   },
   participantText: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.success,
   },
   actionStack: {
@@ -275,3 +259,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 });
+

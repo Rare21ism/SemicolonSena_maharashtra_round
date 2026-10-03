@@ -28,7 +28,7 @@ export default function MeetingEndedScreen() {
   const minutes = Math.floor(durationSec / 60);
   const seconds = durationSec % 60;
   const durationFormatted =
-    minutes > 0 ? `${minutes} minutes ${seconds}s` : `${seconds} seconds`;
+    minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
   // Count distinct speakers
   const distinctSpeakerIds = new Set(
@@ -58,18 +58,18 @@ export default function MeetingEndedScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Badge (Section 34) */}
+        {/* Header Badge */}
         <View style={styles.badgeWrapper}>
           <View style={styles.flagIconCircle}>
-            <Ionicons name="flag-outline" size={24} color={colors.primaryLight} />
+            <Ionicons name="checkmark-done" size={28} color={colors.primaryLight} />
           </View>
-          <Text style={styles.endedTitle}>Meeting ended</Text>
+          <Text style={styles.endedTitle}>Conversation summary</Text>
           <Text style={styles.endedSubtitle}>
-            {sessionName || "Team Discussion"} · {sessionCode}
+            {sessionName || "Group Discussion"} · {sessionCode}
           </Text>
         </View>
 
-        {/* Meeting Analytics Summary Cards Grid (Section 34) */}
+        {/* Summary Metrics Cards Grid */}
         <View style={styles.metricsGrid}>
           <View style={styles.metricCard}>
             <Ionicons name="time-outline" size={20} color={colors.primaryLight} />
@@ -79,40 +79,28 @@ export default function MeetingEndedScreen() {
 
           <View style={styles.metricCard}>
             <Ionicons name="people-outline" size={20} color="#0EA5E9" />
-            <Text style={styles.metricValue}>{roster.length} participants</Text>
-            <Text style={styles.metricLabel}>ATTENDEES</Text>
+            <Text style={styles.metricValue}>{roster.length}</Text>
+            <Text style={styles.metricLabel}>PARTICIPANTS</Text>
           </View>
 
           <View style={styles.metricCard}>
             <Ionicons name="document-text-outline" size={20} color="#10B981" />
-            <Text style={styles.metricValue}>{Math.max(captions.length, 11)}</Text>
-            <Text style={styles.metricLabel}>CAPTION LINES</Text>
+            <Text style={styles.metricValue}>{captions.length}</Text>
+            <Text style={styles.metricLabel}>LINES CAPTURED</Text>
           </View>
 
           <View style={styles.metricCard}>
-            <Ionicons name="mic-outline" size={20} color="#F97316" />
+            <Ionicons name="mic-outline" size={20} color="#FB923C" />
             <Text style={styles.metricValue}>{speakersDetectedCount}</Text>
-            <Text style={styles.metricLabel}>SPEAKERS IDENTIFIED</Text>
+            <Text style={styles.metricLabel}>SPEAKERS</Text>
           </View>
         </View>
 
-        {/* Quality & Audio Fusion Summary */}
-        <View style={styles.qualityCard}>
-          <View style={styles.qualityRow}>
-            <Ionicons name="shield-checkmark" size={18} color={colors.success} />
-            <Text style={styles.qualityTitle}>Coordinated Acoustic Array Preserved</Text>
-          </View>
-          <Text style={styles.qualityDesc}>
-            All audio frames were fused and speaker-attributed across connected
-            client devices. Full subtitle transcript is archived.
-          </Text>
-        </View>
-
-        {/* Primary Action Buttons (Section 34) */}
+        {/* Action Buttons */}
         <View style={styles.actionStack}>
           {recordedAudioUrl && (
             <Button
-              title="Play Recorded Meeting Audio"
+              title="Play Recorded Audio"
               variant="secondary"
               size="lg"
               icon={<Ionicons name="play-circle-outline" size={18} color={colors.primaryLight} />}
@@ -127,7 +115,7 @@ export default function MeetingEndedScreen() {
           )}
 
           <Button
-            title="View / Export Transcript"
+            title="Export Transcript"
             variant="primary"
             size="lg"
             icon={<Ionicons name="download-outline" size={18} color="#FFFFFF" />}
@@ -136,10 +124,10 @@ export default function MeetingEndedScreen() {
           />
 
           <Button
-            title="Start New Meeting"
+            title="Start New Conversation"
             variant="secondary"
             size="lg"
-            icon={<Ionicons name="add-circle-outline" size={18} color={colors.textPrimary} />}
+            icon={<Ionicons name="add" size={18} color={colors.textPrimary} />}
             onPress={handleStartNew}
             style={styles.btnFull}
           />
@@ -166,7 +154,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 24,
     paddingBottom: 48,
-    maxWidth: 620,
+    maxWidth: 580,
     width: "100%",
     alignSelf: "center",
   },
@@ -175,12 +163,12 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   flagIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(99, 102, 241, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.35)",
+    borderColor: "rgba(99, 102, 241, 0.25)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -199,11 +187,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 28,
   },
   metricCard: {
     flex: 1,
-    minWidth: 130,
+    minWidth: 120,
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderDefault,
@@ -213,7 +201,7 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.textPrimary,
     marginVertical: 4,
     textAlign: "center",
@@ -222,30 +210,6 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontSize: 10,
   },
-  qualityCard: {
-    backgroundColor: "rgba(16, 185, 129, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)",
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: 24,
-  },
-  qualityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
-  qualityTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.success,
-  },
-  qualityDesc: {
-    fontSize: 12,
-    color: colors.textMuted,
-    lineHeight: 18,
-  },
   actionStack: {
     gap: 12,
   },
@@ -253,3 +217,4 @@ const styles = StyleSheet.create({
     width: "100%",
   },
 });
+

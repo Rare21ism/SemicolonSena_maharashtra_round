@@ -1,6 +1,6 @@
 """
 Real multi-device pipeline with per-device Lanes, streaming ASR, and shared Whisper correction.
-Selected when ROUNDTABLE_PIPELINE=real.
+Used for every production session.
 """
 
 from __future__ import annotations

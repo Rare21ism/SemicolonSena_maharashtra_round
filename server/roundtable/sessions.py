@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import random
 import secrets
 import string
@@ -19,7 +18,6 @@ from fastapi import WebSocket
 import numpy as np
 
 from roundtable.pipeline.base import Pipeline
-from roundtable.pipeline.mock import MockPipeline
 from roundtable.protocol import DeviceInfo, Platform, RosterMessage
 
 logger = logging.getLogger("roundtable.sessions")
@@ -91,24 +89,16 @@ class Session:
         self.audio_queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_FRAME_BACKLOG)
         self._pipeline_task: Optional[asyncio.Task] = None
 
-        # Mock captions are only available when explicitly enabled for local tests.
-        mode = os.getenv("ROUNDTABLE_PIPELINE", "real").strip().lower()
-        if mode == "real":
-            try:
-                from roundtable.ml.pipeline import RealPipeline  # type: ignore
+        try:
+            from roundtable.ml.pipeline import RealPipeline  # type: ignore
 
-                self.pipeline: Pipeline = RealPipeline()
-                logger.info(f"Loaded RealPipeline for session {session_id}")
-            except Exception as e:
-                logger.exception("Could not initialize RealPipeline for session %s", session_id)
-                raise PipelineInitializationError(
-                    "Real ML pipeline failed to initialize. Install the server ML extras and model files; "
-                    "no mock pipeline was started."
-                ) from e
-        elif mode == "mock":
-            self.pipeline = MockPipeline(self.get_session_clock_ms)
-        else:
-            raise ValueError("ROUNDTABLE_PIPELINE must be 'real' or explicitly 'mock'")
+            self.pipeline: Pipeline = RealPipeline()
+            logger.info("Loaded RealPipeline for session %s", session_id)
+        except Exception as e:
+            logger.exception("Could not initialize RealPipeline for session %s", session_id)
+            raise PipelineInitializationError(
+                "Real ML pipeline failed to initialize. Install the server ML extras and model files."
+            ) from e
 
         self._broadcast_task: Optional[asyncio.Task] = None
         self._start_caption_listener()

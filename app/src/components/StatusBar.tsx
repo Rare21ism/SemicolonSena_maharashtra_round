@@ -7,14 +7,12 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radii, spacing } from "../theme";
+import { colors, radii } from "../theme";
 
 interface StatusBarProps {
   isListening?: boolean;
   participantCount: number;
-  myDeviceIdx?: number | null;
   onOpenRoster?: () => void;
-  audioSyncStatus?: string;
   isMuted?: boolean;
   onToggleMute?: () => void;
 }
@@ -22,9 +20,7 @@ interface StatusBarProps {
 export const StatusBar: React.FC<StatusBarProps> = ({
   isListening = true,
   participantCount,
-  myDeviceIdx,
   onOpenRoster,
-  audioSyncStatus = "Audio synchronized",
   isMuted = false,
   onToggleMute,
 }) => {
@@ -37,12 +33,12 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         Animated.sequence([
           Animated.timing(pulseAnim, {
             toValue: 0.3,
-            duration: 900,
+            duration: 800,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 900,
+            duration: 800,
             useNativeDriver: true,
           }),
         ])
@@ -56,18 +52,22 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Listening & Mic State */}
+      {/* Mic toggle & Listening indicator */}
       <View style={styles.leftSection}>
         <TouchableOpacity
-          style={styles.micBtn}
+          style={[styles.micBtn, isMuted && styles.micBtnMuted]}
           onPress={onToggleMute}
           activeOpacity={0.7}
+          accessibilityLabel={isMuted ? "Unmute microphone" : "Mute microphone"}
         >
           <Ionicons
             name={isMuted ? "mic-off" : "mic"}
             size={16}
             color={isMuted ? colors.danger : colors.success}
           />
+          <Text style={[styles.micBtnText, isMuted && styles.micTextMuted]}>
+            {isMuted ? "Microphone off" : "Mute"}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.listeningWrap}>
@@ -81,33 +81,22 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             ]}
           />
           <Text style={styles.listeningText}>
-            {isMuted ? "Mic muted" : "Listening · 16 kHz"}
+            {isMuted ? "Microphone muted" : "Listening…"}
           </Text>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.syncWrap}>
-          <Ionicons name="git-commit-outline" size={13} color={colors.primaryLight} />
-          <Text style={styles.syncText}>{audioSyncStatus}</Text>
         </View>
       </View>
 
-      {/* Right: Roster trigger & Device idx */}
+      {/* Right: Participant toggle */}
       <View style={styles.rightSection}>
-        {myDeviceIdx !== null && myDeviceIdx !== undefined && (
-          <View style={styles.deviceBadge}>
-            <Text style={styles.deviceText}>Device #{myDeviceIdx}</Text>
-          </View>
-        )}
-
         <TouchableOpacity
           style={styles.rosterBtn}
           onPress={onOpenRoster}
           activeOpacity={0.7}
         >
-          <Ionicons name="people-outline" size={15} color={colors.textSecondary} />
-          <Text style={styles.rosterBtnText}>{participantCount}</Text>
+          <Ionicons name="people-outline" size={16} color={colors.textSecondary} />
+          <Text style={styles.rosterBtnText}>
+            {participantCount} {participantCount === 1 ? "person" : "people"}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -116,7 +105,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    height: 48,
+    height: 52,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -128,12 +117,30 @@ const styles = StyleSheet.create({
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 14,
   },
   micBtn: {
-    padding: 6,
-    borderRadius: radii.sm,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radii.md,
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.25)",
+  },
+  micBtnMuted: {
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderColor: "rgba(239, 68, 68, 0.25)",
+  },
+  micBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.success,
+  },
+  micTextMuted: {
+    color: colors.danger,
   },
   listeningWrap: {
     flexDirection: "row",
@@ -146,54 +153,29 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
   },
   listeningText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "500",
     color: colors.textSecondary,
-  },
-  divider: {
-    width: 1,
-    height: 14,
-    backgroundColor: colors.borderDefault,
-  },
-  syncWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  syncText: {
-    fontSize: 12,
-    color: colors.textMuted,
   },
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-  deviceBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: radii.sm,
-  },
-  deviceText: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontFamily: "monospace",
   },
   rosterBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     backgroundColor: colors.bgCard,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
   rosterBtnText: {
     fontSize: 12,
-    fontWeight: "700",
-    color: colors.textPrimary,
+    fontWeight: "600",
+    color: colors.textSecondary,
   },
 });
+

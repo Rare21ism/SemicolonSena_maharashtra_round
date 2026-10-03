@@ -11,25 +11,19 @@ Requires Python 3.11 or newer and `uv`.
 uv sync --extra dev --extra ml
 uv run python scripts/download_models.py
 
-# Run the server from the repository root
+# Run the real speech recognition server from the repository root
 just dev-server
 
-# In another terminal, run synthetic clients only against an explicitly mocked server
+# Optional integration check with synthetic audio clients
 just fake-clients 3
+
 ```
 
 REST endpoints are `/health`, `/health/details`, `POST /sessions`,
 `GET /sessions/{code}`, and `/health/session/{session_id}`. The WebSocket
 endpoint is `/ws/{session_id}` and accepts a session ID or six-letter code.
-The default pipeline is `real`. Session creation returns an error if the real
-ML dependencies or model files are unavailable; it does not fall back to fake
-captions. For developer-only fake-client testing, explicitly set
-`ROUNDTABLE_PIPELINE=mock` before starting the server. On PowerShell:
-
-```powershell
-$env:ROUNDTABLE_PIPELINE = "mock"
-just dev-server
-```
+Session creation returns an error if the real ML dependencies or model files
+are unavailable. All rooms use the real ML pipeline.
 
 For phone testing, expose port 8000 with an HTTPS tunnel such as
 `ngrok http 8000` or `cloudflared tunnel --url http://localhost:8000`, then

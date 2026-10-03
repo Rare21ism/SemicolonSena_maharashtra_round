@@ -37,7 +37,7 @@ export const CaptionList: React.FC<CaptionListProps> = ({
   const speakerMap = new Map<number, DeviceInfo>();
   roster.forEach((dev) => speakerMap.set(dev.device_idx, dev));
 
-  // Intelligently group consecutive caption lines by the same speaker (Section 17)
+  // Intelligently group consecutive caption lines by the same speaker
   const clusters: CaptionCluster[] = [];
   captions.forEach((cap, index) => {
     const speakerInfo =
@@ -65,12 +65,12 @@ export const CaptionList: React.FC<CaptionListProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Overlapping speech alert banner (Section 23) */}
+      {/* Overlapping speech alert banner */}
       {overlappingCount > 1 && (
         <View style={styles.overlapBanner}>
           <View style={styles.overlapDot} />
           <Text style={styles.overlapBannerText}>
-            2 speakers talking · Overlapping speech separated
+            Multiple people speaking at once
           </Text>
         </View>
       )}
@@ -80,15 +80,14 @@ export const CaptionList: React.FC<CaptionListProps> = ({
           <View style={styles.waveformBox}>
             <AudioWaveform
               isActive={true}
-              height={44}
-              barCount={24}
-              color={colors.primary}
+              height={36}
+              barCount={20}
+              color={colors.primaryLight}
             />
           </View>
-          <Text style={styles.emptyTitle}>Roundtable is listening...</Text>
+          <Text style={styles.emptyTitle}>Roundtable is listening…</Text>
           <Text style={styles.emptySubtitle}>
-            Speak naturally. Live subtitles will stream here with automatic
-            speaker identification.
+            Speak naturally. Live captions will appear here as people talk.
           </Text>
         </View>
       ) : (
@@ -126,29 +125,31 @@ const styles = StyleSheet.create({
   overlapBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(239, 68, 68, 0.18)",
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(239, 68, 68, 0.35)",
+    borderBottomColor: "rgba(239, 68, 68, 0.25)",
     paddingVertical: 8,
     paddingHorizontal: 16,
     gap: 8,
   },
   overlapDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.danger,
   },
   overlapBannerText: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
     color: "#FCA5A5",
-    letterSpacing: 0.2,
   },
   listContent: {
     paddingHorizontal: 16,
     paddingVertical: 16,
     paddingBottom: 48,
+    maxWidth: 720,
+    width: "100%",
+    alignSelf: "center",
   },
   emptyContainer: {
     flex: 1,
@@ -157,24 +158,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   waveformBox: {
-    marginBottom: 20,
-    padding: 16,
-    backgroundColor: "rgba(99, 102, 241, 0.08)",
+    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: "rgba(99, 102, 241, 0.06)",
     borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.2)",
+    borderColor: "rgba(99, 102, 241, 0.15)",
   },
   emptyTitle: {
     ...typography.h3,
     color: colors.textPrimary,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: "center",
   },
   emptySubtitle: {
     ...typography.body,
     color: colors.textMuted,
     textAlign: "center",
-    maxWidth: 420,
+    maxWidth: 380,
     lineHeight: 22,
   },
 });
+

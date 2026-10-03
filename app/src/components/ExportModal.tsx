@@ -56,17 +56,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
 
     if (format === "markdown") {
-      let md = `# Roundtable Transcript — Session ${sessionCode}\n\n`;
+      let md = `# Roundtable Transcript — Room ${sessionCode}\n\n`;
       md += `*Exported on ${new Date().toLocaleString()}*\n\n`;
       md += `### Participants\n`;
       roster.forEach((r) => {
-        md += `- **${r.name}** (Device #${r.device_idx})\n`;
+        md += `- **${r.name}**\n`;
       });
       md += `\n---\n\n### Transcript\n\n`;
 
       captions.forEach((c) => {
         const speaker =
-          c.speaker_id !== null ? speakerMap.get(c.speaker_id) || `Speaker ${c.speaker_id}` : "Unknown";
+          c.speaker_id !== null ? speakerMap.get(c.speaker_id) || `Speaker ${c.speaker_id + 1}` : "Speaker";
         const timeSec = (c.t_start / 1000).toFixed(1);
         md += `**${speaker}** \`[${timeSec}s]\`\n> ${c.text}\n\n`;
       });

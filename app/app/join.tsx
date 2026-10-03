@@ -51,16 +51,16 @@ export default function JoinMeetingScreen() {
       if (info.exists) {
         setSessionPreview({
           code: codeToTest,
-          meetingName: "Team Discussion",
+          meetingName: "Group Discussion",
           hostName: info.roster[0]?.name || "Host",
           participantCount: info.roster.length,
         });
       } else {
-        setErrorMsg("Meeting not found. Check the code and try again.");
+        setErrorMsg("Room not found. Check the code and try again.");
         setSessionPreview(null);
       }
     } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : "Could not reach the meeting server.");
+      setErrorMsg("Could not reach the server. Please check your connection.");
       setSessionPreview(null);
     } finally {
       setLoading(false);
@@ -79,7 +79,7 @@ export default function JoinMeetingScreen() {
 
   const handleJoin = () => {
     if (inputCode.length !== 6) {
-      setErrorMsg("Please enter the full 6-character meeting code.");
+      setErrorMsg("Please enter the full 6-character room code.");
       return;
     }
     if (!name.trim()) {
@@ -89,7 +89,6 @@ export default function JoinMeetingScreen() {
 
     setSessionCode(inputCode);
     setIsHost(false);
-    // Proceed to check microphone
     router.push("/setup");
   };
 
@@ -112,19 +111,19 @@ export default function JoinMeetingScreen() {
             >
               <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Join a meeting</Text>
+            <Text style={styles.headerTitle}>Join a conversation</Text>
             <View style={{ width: 32 }} />
           </View>
 
-          {/* Join Card (Section 10) */}
+          {/* Join Card */}
           <View style={styles.card}>
             <View style={styles.iconCircle}>
               <Ionicons name="enter-outline" size={24} color={colors.primary} />
             </View>
 
-            <Text style={styles.cardTitle}>Enter meeting code</Text>
+            <Text style={styles.cardTitle}>Enter room code</Text>
             <Text style={styles.cardDesc}>
-              Enter the 6-character code shared by your host to join the meeting.
+              Enter the 6-character code shared by your host to join.
             </Text>
 
             {/* Discrete 6-letter Box */}
@@ -136,17 +135,17 @@ export default function JoinMeetingScreen() {
             {loading && (
               <View style={styles.loadingRow}>
                 <ActivityIndicator size="small" color={colors.primaryLight} />
-                <Text style={styles.loadingText}>Verifying meeting code...</Text>
+                <Text style={styles.loadingText}>Looking up room...</Text>
               </View>
             )}
 
-            {/* Meeting Preview Info (Section 10) */}
+            {/* Room Preview Info */}
             {sessionPreview && (
               <View style={styles.previewBox}>
                 <View style={styles.previewHeader}>
                   <Ionicons
                     name="checkmark-circle"
-                    size={18}
+                    size={16}
                     color={colors.success}
                   />
                   <Text style={styles.previewTitle}>
@@ -159,12 +158,9 @@ export default function JoinMeetingScreen() {
                     <Text style={styles.previewHighlight}>
                       {sessionPreview.hostName}
                     </Text>
-                  </Text>
-                  <Text style={styles.previewDetailText}>
-                    <Text style={styles.previewHighlight}>
-                      {sessionPreview.participantCount} people
-                    </Text>{" "}
-                    are already here.
+                    {sessionPreview.participantCount > 0
+                      ? ` · ${sessionPreview.participantCount} ${sessionPreview.participantCount === 1 ? "person" : "people"} connected`
+                      : ""}
                   </Text>
                 </View>
               </View>
@@ -173,7 +169,7 @@ export default function JoinMeetingScreen() {
             {/* Error Message */}
             {errorMsg && (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={16} color={colors.danger} />
+                <Ionicons name="alert-circle-outline" size={16} color={colors.danger} />
                 <Text style={styles.errorText}>{errorMsg}</Text>
               </View>
             )}
@@ -182,7 +178,7 @@ export default function JoinMeetingScreen() {
             <View style={styles.nameSection}>
               <Input
                 label="YOUR NAME"
-                placeholder="e.g. Jim, Pam, Dwight"
+                placeholder="Enter your name"
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
@@ -197,7 +193,7 @@ export default function JoinMeetingScreen() {
             </View>
 
             <Button
-              title="Join Meeting"
+              title="Join Conversation"
               variant="primary"
               size="lg"
               disabled={inputCode.length !== 6 || !name.trim()}
@@ -222,9 +218,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 24,
     paddingBottom: 48,
-    maxWidth: 580,
+    maxWidth: 540,
     width: "100%",
     alignSelf: "center",
   },
@@ -252,10 +248,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(99, 102, 241, 0.12)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -270,13 +266,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: colors.textMuted,
     marginBottom: 16,
-    maxWidth: 420,
+    maxWidth: 400,
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginVertical: 6,
+    marginVertical: 8,
   },
   loadingText: {
     fontSize: 12,
@@ -286,7 +282,7 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: "rgba(16, 185, 129, 0.08)",
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.3)",
+    borderColor: "rgba(16, 185, 129, 0.25)",
     borderRadius: radii.lg,
     padding: spacing.md,
     marginVertical: 10,
@@ -294,12 +290,12 @@ const styles = StyleSheet.create({
   previewHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
+    gap: 6,
+    marginBottom: 4,
   },
   previewTitle: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
     color: colors.success,
   },
   previewDetails: {
@@ -310,16 +306,16 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   previewHighlight: {
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.textPrimary,
   },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderColor: "rgba(239, 68, 68, 0.25)",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: radii.md,
@@ -329,7 +325,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     color: colors.danger,
-    fontWeight: "600",
+    fontWeight: "500",
     flex: 1,
   },
   nameSection: {
@@ -341,3 +337,4 @@ const styles = StyleSheet.create({
     width: "100%",
   },
 });
+

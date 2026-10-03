@@ -28,7 +28,6 @@ export default function VoiceEnrollmentScreen() {
   const [countdown, setCountdown] = useState<number>(5);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
-  const [capturedFrameCount, setCapturedFrameCount] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
   const sourceRef = useRef<ReturnType<typeof createAudioSource> | null>(null);
   const clientRef = useRef<RoundtableClient | null>(null);
@@ -48,7 +47,6 @@ export default function VoiceEnrollmentScreen() {
   const startRecording = async () => {
     setCaptureError(null);
     setCountdown(5);
-    setCapturedFrameCount(0);
     setState("connecting");
 
     let source: ReturnType<typeof createAudioSource> | null = null;
@@ -57,7 +55,7 @@ export default function VoiceEnrollmentScreen() {
 
     try {
       const client = await new Promise<RoundtableClient>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Could not connect to the meeting server.")), 10000);
+        const timeout = setTimeout(() => reject(new Error("Could not connect to the room server.")), 10000);
         const connectedClient = new RoundtableClient({
           serverUrl,
           sessionId: sessionCode,
@@ -69,7 +67,7 @@ export default function VoiceEnrollmentScreen() {
           onStatusChange: (status) => {
             if (status === "reconnecting" || status === "disconnected") {
               clearTimeout(timeout);
-              reject(new Error("Connection to the meeting server was lost."));
+              reject(new Error("Connection lost. Please try again."));
             }
           },
         });
@@ -112,15 +110,14 @@ export default function VoiceEnrollmentScreen() {
       clientRef.current = null;
 
       if (frames.length < 45 || nonZeroSamples === 0) {
-        throw new Error("Microphone recording was empty or too short. Check microphone permission and try again.");
+        throw new Error("We couldn't hear your voice. Check your microphone and try again.");
       }
 
       capturedAudioRef.current = frames;
-      setCapturedFrameCount(frames.length);
       setVoiceEnrolled(true);
       setState("captured");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Microphone recording failed.";
+      const message = error instanceof Error ? error.message : "Recording failed. Please try again.";
       setCaptureError(message);
       setState("idle");
       recordingRef.current = false;
@@ -174,7 +171,7 @@ export default function VoiceEnrollmentScreen() {
       await audio.play();
     } catch (error) {
       finishPlayback();
-      setCaptureError(error instanceof Error ? error.message : "Could not play the recorded sample.");
+      setCaptureError("Could not play recorded sample.");
     }
   };
 
@@ -182,7 +179,7 @@ export default function VoiceEnrollmentScreen() {
     setState("ready");
     setTimeout(() => {
       router.push("/waiting");
-    }, 1200);
+    }, 1000);
   };
 
   return (
@@ -200,21 +197,19 @@ export default function VoiceEnrollmentScreen() {
           >
             <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Voice Enrollment</Text>
+          <Text style={styles.headerTitle}>Voice Setup</Text>
           <View style={{ width: 32 }} />
         </View>
 
         <View style={styles.card}>
           {state === "ready" ? (
-            /* Confirmation celebration (Section 12) */
             <View style={styles.readyCard}>
               <View style={styles.readyCircle}>
-                <Ionicons name="checkmark" size={36} color={colors.success} />
+                <Ionicons name="checkmark" size={32} color={colors.success} />
               </View>
               <Text style={styles.readyTitle}>You're ready, {name}.</Text>
               <Text style={styles.readyDesc}>
-                Your microphone sample has been sent through the meeting speech
-                pipeline. Entering the meeting lobby...
+                Entering the conversation room…
               </Text>
               <ActivityIndicator
                 size="small"
@@ -226,37 +221,30 @@ export default function VoiceEnrollmentScreen() {
             <>
               <View style={styles.iconCircle}>
                 <Ionicons
-                  name={
-                    state === "recording"
-                      ? "radio"
-                      : state === "captured"
-                      ? "sparkles"
-                      : "finger-print-outline"
-                  }
+                  name={state === "recording" ? "mic" : "mic-outline"}
                   size={28}
                   color={state === "recording" ? colors.danger : colors.primary}
                 />
               </View>
 
-              <Text style={styles.cardTitle}>Check your voice sample</Text>
+              <Text style={styles.cardTitle}>Let's hear your voice</Text>
               <Text style={styles.cardDesc}>
-                Speak for five seconds. Your live 16 kHz microphone frames are sent
-                to the meeting server and processed by its speech pipeline.
+                Say a short sentence so Roundtable can recognize you when you speak.
               </Text>
 
               {captureError && <Text style={styles.captureError}>{captureError}</Text>}
 
-              {/* Natural prompt card (Section 12) */}
+              {/* Natural sentence prompt */}
               <View style={styles.promptBox}>
-                <Text style={styles.promptLabel}>SAY NATURALLY:</Text>
-                <Text style={styles.promptText}>"My name is {name}."</Text>
+                <Text style={styles.promptLabel}>PLEASE SAY:</Text>
+                <Text style={styles.promptText}>"Hello, my name is {name}."</Text>
               </View>
 
               {/* State: Idle */}
               {state === "idle" && (
                 <View style={styles.actionWrap}>
                   <Button
-                    title="Start 5-Second Sample"
+                    title="Start 5-Second Test"
                     variant="primary"
                     size="lg"
                     icon={<Ionicons name="mic" size={18} color="#FFFFFF" />}
@@ -269,7 +257,7 @@ export default function VoiceEnrollmentScreen() {
               {state === "connecting" && (
                 <View style={styles.recordingWrap}>
                   <ActivityIndicator color={colors.primaryLight} />
-                  <Text style={styles.cardDesc}>Connecting to the meeting and requesting microphone access…</Text>
+                  <Text style={styles.cardDesc}>Connecting microphone...</Text>
                 </View>
               )}
 
@@ -279,15 +267,15 @@ export default function VoiceEnrollmentScreen() {
                   <View style={styles.countdownPill}>
                     <View style={styles.recDot} />
                     <Text style={styles.countdownText}>
-                      RECORDING · {countdown}s REMAINING
+                      LISTENING · {countdown}s
                     </Text>
                   </View>
 
                   <View style={styles.waveformBox}>
                     <AudioWaveform
                       isActive={true}
-                      height={60}
-                      barCount={30}
+                      height={50}
+                      barCount={28}
                       color={colors.danger}
                       level={micLevel}
                     />
@@ -301,11 +289,11 @@ export default function VoiceEnrollmentScreen() {
                   <View style={styles.successPill}>
                     <Ionicons
                       name="checkmark-circle"
-                      size={18}
+                      size={16}
                       color={colors.success}
                     />
                     <Text style={styles.successText}>
-                      Sent {capturedFrameCount} microphone frames for {name}
+                      Voice sample recorded
                     </Text>
                   </View>
 
@@ -351,7 +339,7 @@ export default function VoiceEnrollmentScreen() {
                   {/* Name confirmation */}
                   <View style={styles.nameConfirmBox}>
                     <Input
-                      label="NAME TO DISPLAY IN SUBTITLES"
+                      label="YOUR DISPLAY NAME"
                       value={name}
                       onChangeText={setName}
                       autoCapitalize="words"
@@ -366,7 +354,7 @@ export default function VoiceEnrollmentScreen() {
                   </View>
 
                   <Button
-                    title={`Continue as ${name}`}
+                    title="Continue"
                     variant="primary"
                     size="lg"
                     icon={<Ionicons name="arrow-forward" size={18} color="#FFFFFF" />}
@@ -390,9 +378,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 24,
     paddingBottom: 48,
-    maxWidth: 580,
+    maxWidth: 540,
     width: "100%",
     alignSelf: "center",
   },
@@ -420,10 +408,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(99, 102, 241, 0.12)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -438,13 +426,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: colors.textMuted,
     marginBottom: 20,
-    maxWidth: 420,
+    maxWidth: 400,
   },
   promptBox: {
     width: "100%",
     backgroundColor: "rgba(99, 102, 241, 0.08)",
-    borderWidth: 1.5,
-    borderColor: "rgba(99, 102, 241, 0.3)",
+    borderWidth: 1,
+    borderColor: "rgba(99, 102, 241, 0.25)",
     borderRadius: radii.lg,
     padding: spacing.md,
     alignItems: "center",
@@ -456,8 +444,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   promptText: {
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 18,
+    fontWeight: "700",
     color: colors.textPrimary,
     textAlign: "center",
   },
@@ -475,13 +463,14 @@ const styles = StyleSheet.create({
     color: colors.danger,
     textAlign: "center",
     marginBottom: 12,
+    fontSize: 13,
   },
   countdownPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.4)",
+    borderColor: "rgba(239, 68, 68, 0.3)",
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: radii.full,
@@ -489,16 +478,15 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   recDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.danger,
   },
   countdownText: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.danger,
-    letterSpacing: 0.5,
   },
   waveformBox: {
     width: "100%",
@@ -518,7 +506,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(16, 185, 129, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.3)",
+    borderColor: "rgba(16, 185, 129, 0.25)",
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: radii.full,
@@ -527,7 +515,7 @@ const styles = StyleSheet.create({
   },
   successText: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.success,
   },
   sampleControls: {
@@ -548,12 +536,10 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   readyCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(16, 185, 129, 0.18)",
-    borderWidth: 2,
-    borderColor: colors.success,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -567,6 +553,7 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textMuted,
     textAlign: "center",
-    maxWidth: 360,
+    maxWidth: 340,
   },
 });
+

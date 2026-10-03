@@ -27,7 +27,6 @@ export default function MeetingLobbyScreen() {
     myDeviceIdx,
     connectToSession,
     toastMessage,
-    showToast,
     clearToast,
   } = useSession();
 
@@ -72,14 +71,14 @@ export default function MeetingLobbyScreen() {
           >
             <Ionicons name="close" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Meeting Lobby</Text>
+          <Text style={styles.headerTitle}>Lobby</Text>
           <View style={{ width: 32 }} />
         </View>
 
-        {/* Meeting Banner (Section 13) */}
+        {/* Room Banner */}
         <View style={styles.roomBanner}>
           <Text style={styles.sessionTitle} numberOfLines={1}>
-            {sessionName || "Team Discussion"}
+            {sessionName || "Group Discussion"}
           </Text>
 
           <TouchableOpacity
@@ -87,7 +86,7 @@ export default function MeetingLobbyScreen() {
             onPress={handleCopyCode}
             activeOpacity={0.8}
           >
-            <Text style={styles.codeLabel}>MEETING CODE</Text>
+            <Text style={styles.codeLabel}>ROOM CODE</Text>
             <Text style={styles.codeText}>{sessionCode}</Text>
             <Ionicons
               name={copied ? "checkmark-circle" : "copy-outline"}
@@ -97,17 +96,19 @@ export default function MeetingLobbyScreen() {
           </TouchableOpacity>
 
           <Text style={styles.roomNotice}>
-            Nearby devices on the table will automatically coordinate audio
-            fusion when the conversation starts.
+            Place your phones and laptops on the table. Audio from all connected
+            devices will be combined into a single transcript.
           </Text>
         </View>
 
         {/* Participant Roster Section */}
         <View style={styles.rosterSection}>
           <View style={styles.rosterHeader}>
-            <Text style={styles.rosterLabel}>PARTICIPANTS</Text>
+            <Text style={styles.rosterLabel}>PEOPLE HERE</Text>
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{roster.length} connected</Text>
+              <Text style={styles.countText}>
+                {roster.length} {roster.length === 1 ? "person" : "people"}
+              </Text>
             </View>
           </View>
 
@@ -119,7 +120,7 @@ export default function MeetingLobbyScreen() {
                   key={dev.device_idx}
                   device={dev}
                   isSelf={isSelf}
-                  statusText={isSelf ? "Microphone Ready" : "Ready"}
+                  statusText={isSelf ? "Microphone active" : "Connected"}
                   connectionQuality="good"
                 />
               );
@@ -131,7 +132,7 @@ export default function MeetingLobbyScreen() {
         <View style={styles.actionSection}>
           {isHost ? (
             <Button
-              title="Start Meeting"
+              title="Start Conversation"
               variant="primary"
               size="lg"
               icon={<Ionicons name="play" size={18} color="#FFFFFF" />}
@@ -142,10 +143,10 @@ export default function MeetingLobbyScreen() {
             <View style={styles.waitingNoticeBox}>
               <View style={styles.waitingDot} />
               <Text style={styles.waitingNoticeText}>
-                Waiting for host to start the meeting...
+                Waiting for the host to start…
               </Text>
               <Button
-                title="Enter Meeting Now"
+                title="Enter Conversation"
                 variant="secondary"
                 size="md"
                 onPress={handleStartMeeting}
@@ -155,7 +156,7 @@ export default function MeetingLobbyScreen() {
           )}
 
           <Button
-            title="Leave Meeting"
+            title="Leave"
             variant="ghost"
             size="md"
             onPress={handleLeave}
@@ -173,9 +174,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 24,
     paddingBottom: 48,
-    maxWidth: 620,
+    maxWidth: 580,
     width: "100%",
     alignSelf: "center",
   },
@@ -183,7 +184,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   backButton: {
     padding: 6,
@@ -204,42 +205,42 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sessionTitle: {
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "700",
     color: colors.textPrimary,
     marginBottom: 12,
   },
   codePill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
-    borderWidth: 1.5,
-    borderColor: "rgba(99, 102, 241, 0.4)",
-    paddingVertical: 8,
-    paddingHorizontal: 18,
+    backgroundColor: "rgba(99, 102, 241, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(99, 102, 241, 0.3)",
+    paddingVertical: 6,
+    paddingHorizontal: 16,
     borderRadius: radii.full,
     gap: 8,
     marginBottom: 12,
   },
   codeLabel: {
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.primaryLight,
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   codeText: {
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 18,
+    fontWeight: "700",
     color: colors.textPrimary,
     fontFamily: "monospace",
     letterSpacing: 2,
   },
   roomNotice: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.textMuted,
     textAlign: "center",
     maxWidth: 380,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   rosterSection: {
     marginBottom: 24,
@@ -248,22 +249,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 10,
   },
   rosterLabel: {
     ...typography.label,
   },
   countBadge: {
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.3)",
+    borderColor: "rgba(16, 185, 129, 0.25)",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: radii.full,
   },
   countText: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.success,
   },
   participantList: {
@@ -285,9 +286,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   waitingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.warning,
     marginBottom: 6,
   },
@@ -297,3 +298,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+
