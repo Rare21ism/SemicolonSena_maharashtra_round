@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Web AudioSource — real microphone capture implementation.
  *
  * Audio pipeline:
@@ -19,8 +19,7 @@
  * exactly following PROTOCOL.md §4. This file only concerns itself with
  * delivering (Int16Array, capture_ts_ms) pairs to callers.
  *
- * Fallback: if AudioWorklet is unavailable (older browsers), we fall back to
- * emitting silent frames via setInterval so the session still functions.
+ * If capture cannot produce real microphone PCM, start() fails with an error.
  *
  * Browser compatibility notes:
  *  - Desktop Chrome:   full support
@@ -33,7 +32,6 @@
  *  - HTTP (insecure):  getUserMedia is blocked; we detect this and throw clearly.
  */
 
-import { FRAME_DURATION_MS, SAMPLES_PER_FRAME } from '@roundtable/protocol';
 import { AudioSource } from './AudioSource';
 
 const TARGET_SAMPLE_RATE = 16_000;
@@ -49,8 +47,8 @@ export class WebAudioSource implements AudioSource {
   private _stream:     MediaStream | null                          = null;
   private _worklet:    AudioWorkletNode | null                     = null;
   private _source:     MediaStreamAudioSourceNode | null           = null;
+  private _mutedOutput: GainNode | null                            = null;
   private _callback:   ((pcm: Int16Array, ts: number) => void) | null = null;
-  private _fallbackTimer: ReturnType<typeof setInterval> | null   = null;
   private _contextStartMs = 0; // performance.now() at AudioContext creation
   private _started = false;
 
@@ -63,6 +61,7 @@ export class WebAudioSource implements AudioSource {
   async start (): Promise<void> {
     if (this._started) return;
     this._started = true;
+    try {
 
     // 1. Insecure context check — microphone requires HTTPS (or localhost).
     if (typeof window !== 'undefined' && !window.isSecureContext) {
@@ -102,108 +101,6 @@ export class WebAudioSource implements AudioSource {
           'Microphone permission denied. ' +
           'Click the camera icon in the address bar and allow access, then reload.'
         );
- * Web AudioSource Implementation
- * Captures live microphone audio using the Web Audio API, downsamples to 16 kHz Mono,
- * and emits 1600-sample (100ms) Int16 PCM frames per the wire protocol.
- * Falls back to active synthetic voice bursts if microphone permissions are denied or unavailable.
- */
-
-import { AudioSource } from "./AudioSource";
-import { SAMPLES_PER_FRAME, FRAME_DURATION_MS, SAMPLE_RATE } from "@roundtable/protocol";
-
-export class WebAudioSource implements AudioSource {
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private chunkCallback: ((pcm: Int16Array, captureTsMs: number) => void) | null = null;
-  private audioCtx: AudioContext | null = null;
-  private mediaStream: MediaStream | null = null;
-  private scriptNode: ScriptProcessorNode | null = null;
-  private bufferQueue: number[] = [];
-
-  async start(): Promise<void> {
-    if (this.audioCtx || this.timer) return;
-
-    // 1. Try requesting real microphone access on web
-    if (
-      typeof navigator !== "undefined" &&
-      navigator.mediaDevices &&
-      typeof navigator.mediaDevices.getUserMedia === "function"
-    ) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-            channelCount: 1,
-          },
-        });
-        this.mediaStream = stream;
-
-        const AudioCtxClass =
-          window.AudioContext || (window as any).webkitAudioContext;
-        const ctx = new AudioCtxClass();
-        this.audioCtx = ctx;
-
-        const sourceNode = ctx.createMediaStreamSource(stream);
-        // 4096 buffer size provides smooth audio callback
-        const scriptNode = ctx.createScriptProcessor(4096, 1, 1);
-        this.scriptNode = scriptNode;
-
-        const inputSampleRate = ctx.sampleRate;
-        const resampleRatio = inputSampleRate / SAMPLE_RATE;
-
-        scriptNode.onaudioprocess = (e) => {
-          const inputData = e.inputBuffer.getChannelData(0);
-          const captureTsMs = performance.now();
-
-          // Resample linear interpolation to 16 kHz
-          for (let i = 0; i < inputData.length; i += resampleRatio) {
-            const idx = Math.floor(i);
-            const sample = inputData[idx] || 0;
-            // Float32 [-1.0, 1.0] to Int16 [-32768, 32767]
-            const intSample = Math.max(
-              -32768,
-              Math.min(32767, Math.round(sample * 32767))
-            );
-            this.bufferQueue.push(intSample);
-          }
-
-          // Emit full 1600-sample (100ms) frames
-          while (this.bufferQueue.length >= SAMPLES_PER_FRAME) {
-            const chunk = this.bufferQueue.splice(0, SAMPLES_PER_FRAME);
-            const pcm = new Int16Array(chunk);
-            if (this.chunkCallback) {
-              this.chunkCallback(pcm, captureTsMs);
-            }
-          }
-        };
-
-        sourceNode.connect(scriptNode);
-        scriptNode.connect(ctx.destination);
-        return;
-      } catch (err) {
-        console.warn(
-          "[WebAudioSource] Live mic unavailable or denied. Falling back to active voice bursts:",
-          err
-        );
-      }
-    }
-
-    // 2. Fallback: emit active synthetic PCM bursts (300Hz sine wave)
-    let seq = 0;
-    this.timer = setInterval(() => {
-      if (this.chunkCallback) {
-        const pcm = new Int16Array(SAMPLES_PER_FRAME);
-        const captureTsMs = performance.now();
-        const burst = Math.floor(seq / 10) % 2 === 0 ? 1.0 : 0.05;
-        const amplitude = 8000.0 * burst;
-
-        for (let i = 0; i < SAMPLES_PER_FRAME; i++) {
-          const t = (seq * SAMPLES_PER_FRAME + i) / 16000.0;
-          pcm[i] = Math.round(amplitude * Math.sin(2.0 * Math.PI * 340.0 * t));
-        }
-        seq++;
-        this.chunkCallback(pcm, captureTsMs);
       }
       if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
         throw new Error(
@@ -251,18 +148,14 @@ export class WebAudioSource implements AudioSource {
 
     // 6. Try to load the AudioWorklet.
     if (!ctx.audioWorklet) {
-      log('AudioWorklet API not available — falling back to silent frames');
-      this._startSilentFallback();
-      return;
+      throw new Error('AudioWorklet is unavailable; real microphone PCM capture cannot start in this browser.');
     }
 
     try {
       await ctx.audioWorklet.addModule(WORKLET_URL);
       log('AudioWorklet module loaded');
     } catch (err) {
-      log('Failed to load AudioWorklet module:', err, '— falling back to silent frames');
-      this._startSilentFallback();
-      return;
+      throw new Error(`Could not load the microphone audio processor: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // 7. Build the pipeline: mic source → worklet.
@@ -271,12 +164,15 @@ export class WebAudioSource implements AudioSource {
 
     const workletNode = new AudioWorkletNode(ctx, 'roundtable-worklet', {
       numberOfInputs:        1,
-      numberOfOutputs:       0,     // no audio output; we only consume
+      numberOfOutputs:       1,
       channelCount:          1,
       channelCountMode:      'explicit',
       channelInterpretation: 'discrete',
     });
     this._worklet = workletNode;
+    const mutedOutput = ctx.createGain();
+    mutedOutput.gain.value = 0;
+    this._mutedOutput = mutedOutput;
 
     // 8. Handle messages from the worklet thread.
     const contextStartMs = this._contextStartMs;
@@ -302,24 +198,26 @@ export class WebAudioSource implements AudioSource {
     };
 
     sourceNode.connect(workletNode);
+    workletNode.connect(mutedOutput);
+    mutedOutput.connect(ctx.destination);
     log('Capture pipeline connected — streaming at 16 kHz');
+    } catch (error) {
+      this.stop();
+      throw error;
+    }
   }
 
   stop (): void {
     this._started = false;
 
-    // Stop silent fallback if active.
-    if (this._fallbackTimer !== null) {
-      clearInterval(this._fallbackTimer);
-      this._fallbackTimer = null;
-    }
-
     // Disconnect the worklet pipeline.
     try { this._source?.disconnect(); }   catch (_) {/* ignore */}
     try { this._worklet?.port.close(); }  catch (_) {/* ignore */}
     try { this._worklet?.disconnect(); }  catch (_) {/* ignore */}
+    try { this._mutedOutput?.disconnect(); } catch (_) {/* ignore */}
     this._source  = null;
     this._worklet = null;
+    this._mutedOutput = null;
 
     // Close AudioContext (releases system audio resources).
     if (this._ctx && this._ctx.state !== 'closed') {
@@ -332,39 +230,8 @@ export class WebAudioSource implements AudioSource {
     this._stream = null;
 
     log('Capture stopped');
-    if (this.scriptNode) {
-      this.scriptNode.disconnect();
-      this.scriptNode = null;
-    }
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach((track) => track.stop());
-      this.mediaStream = null;
-    }
-    if (this.audioCtx) {
-      this.audioCtx.close().catch(() => {});
-      this.audioCtx = null;
-    }
-    this.bufferQueue = [];
   }
 
-  // ─── Private ───────────────────────────────────────────────────────────────
-
-  /**
-   * Last-resort fallback when AudioWorklet is unavailable.
-   * Emits silent 1 600-sample frames at the correct interval so the session
-   * remains functional (captions from other devices still arrive).
-   * Timestamp still uses sample-counter math for consistency.
-   */
-  private _startSilentFallback (): void {
-    log('Silent fallback active — no real audio will be captured');
-    let samplePos = 0;
-    this._fallbackTimer = setInterval(() => {
-      if (!this._callback) return;
-      const captureTsMs = this._contextStartMs + (samplePos / TARGET_SAMPLE_RATE) * 1_000;
-      this._callback(new Int16Array(SAMPLES_PER_FRAME), captureTsMs);
-      samplePos += SAMPLES_PER_FRAME;
-    }, FRAME_DURATION_MS);
-  }
 }
 
 export const createAudioSource = (): AudioSource => new WebAudioSource();

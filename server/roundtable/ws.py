@@ -1,4 +1,4 @@
-"""WebSocket handler for the frozen Roundtable protocol."""
+﻿"""WebSocket handler for the frozen Roundtable protocol."""
 
 from __future__ import annotations
 
@@ -8,16 +8,9 @@ import math
 import time
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
-
-from roundtable.protocol import JoinMessage, PingMessage, ResumeMessage, unpack_audio_frame
 from starlette.websockets import WebSocketDisconnected
 
-from roundtable.protocol import (
-    CaptionMessage,
-    JoinedMessage,
-    PongMessage,
-    unpack_audio_frame,
-)
+from roundtable.protocol import JoinMessage, PingMessage, ResumeMessage, unpack_audio_frame
 from roundtable.sessions import DeviceSession, Session, session_manager
 
 logger = logging.getLogger("roundtable.ws")
@@ -32,11 +25,6 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
         await websocket.close(code=4004, reason="Session not found")
         return
     device: DeviceSession | None = None
-        logger.info(f"WebSocket session '{session_id}' not found, auto-creating session")
-        session = await session_manager.create_or_get_session(session_id)
-
-    device: Optional[DeviceSession] = None
-
     try:
         while True:
             message = await websocket.receive()
@@ -113,31 +101,10 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
             except (ValidationError, ValueError, TypeError, json.JSONDecodeError) as exc:
                 logger.warning("Invalid control message session=%s: %s", session.session_id, exc)
                 await websocket.send_json({"type": "error", "message": "Invalid control message"})
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, WebSocketDisconnected):
         logger.info("WebSocket disconnected session=%s", session.code)
     except Exception:
         logger.exception("WebSocket error session=%s", session.code)
-                    # Reserved stub for speaker enrollment
-                    logger.info(f"Enroll message received from device {device.device_idx if device else 'unregistered'}")
-                    # No-op stub response or ack if needed
-
-                elif msg_type == "caption":
-                    try:
-                        caption_data = dict(data)
-                        if "type" in caption_data:
-                            del caption_data["type"]
-                        caption_obj = CaptionMessage(type="caption", **caption_data)
-                        await session.broadcast_json(caption_obj.model_dump())
-                    except Exception as e:
-                        logger.warning(f"Failed to broadcast caption from client: {e}")
-
-    except (WebSocketDisconnect, WebSocketDisconnected):
-        logger.info(f"WebSocket disconnected for session {session.code}")
-    except Exception as e:
-        if "disconnect" in str(e).lower():
-            logger.info(f"WebSocket disconnected for session {session.code}")
-        else:
-            logger.error(f"WebSocket error in session {session.code}: {e}", exc_info=True)
     finally:
         if device:
             await session.disconnect_device(device.device_idx, websocket)

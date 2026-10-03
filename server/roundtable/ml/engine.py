@@ -178,7 +178,8 @@ class FinalASR:
     ):
         from faster_whisper import WhisperModel
 
-        self.model_name = model_name or os.getenv("WHISPER_MODEL", "base.en")
+        # Match download_models.py's local small.en model directory by default.
+        self.model_name = model_name or os.getenv("WHISPER_MODEL", "small.en")
         self.device = device or os.getenv("WHISPER_DEVICE") or _auto_detect_device()
 
         default_compute = "float16" if self.device == "cuda" else "int8"

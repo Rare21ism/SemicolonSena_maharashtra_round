@@ -38,6 +38,10 @@ export class RoundtableClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect = true;
   private reconnectAttempts = 0;
+  // Audio sources report capture time in the local performance clock. Convert
+  // that clock into the server's session clock once the join acknowledgement
+  // gives us a shared anchor.
+  private sessionClockOffsetMs = 0;
 
   // Clock synchronization (NTP style)
   public clockOffsetMs = 0.0;
@@ -138,6 +142,8 @@ export class RoundtableClient {
       case "joined":
         this.deviceIdx = msg.device_idx;
         this.token = msg.token;
+        this.sessionClockOffsetMs =
+          msg.session_clock_ms - (typeof performance !== "undefined" ? performance.now() : Date.now());
         this.options.onJoined?.(msg);
         break;
 
@@ -209,21 +215,11 @@ export class RoundtableClient {
     const frameBytes = packAudioFrame({
       device_idx: this.deviceIdx,
       seq: this.seq++,
-      capture_ts_ms: captureTsMs,
+      capture_ts_ms: captureTsMs + this.sessionClockOffsetMs,
       pcm,
     });
 
     this.ws.send(frameBytes.buffer as ArrayBuffer);
-  }
-
-  /**
-   * Broadcasts a real-time speech caption to all participants in the session.
-   */
-  public sendCaption(caption: CaptionMessage): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return;
-    }
-    this.ws.send(JSON.stringify(caption));
   }
 
   public disconnect(): void {

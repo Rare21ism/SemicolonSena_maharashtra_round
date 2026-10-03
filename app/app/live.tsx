@@ -1,93 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import React, { useEffect, useState } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { CaptionMessage, DeviceInfo } from "@roundtable/protocol";
-
-import { createAudioSource } from "../src/audio";
-import { WakeLockManager } from "../src/audio/wakeLock";
-import { CaptionLine } from "../src/components/CaptionLine";
 import { ConnectionBadge } from "../src/components/ConnectionBadge";
-import { PermissionError } from "../src/components/PermissionError";
-import { SpeakerChip } from "../src/components/SpeakerChip";
-import { ConnectionStatus, RoundtableClient } from "../src/net/ws";
-
-export default function LiveScreen() {
-  // Wake lock: prevent screen sleep during live session.
-  // WakeLockManager works on web via Screen Wake Lock API and degrades gracefully elsewhere.
-  const wakeLockRef = useRef<WakeLockManager>(new WakeLockManager());
-import { useKeepAwake } from "expo-keep-awake";
-import { Ionicons } from "@expo/vector-icons";
-import { colors, radii, spacing, typography } from "../src/theme";
 import { CaptionList } from "../src/components/CaptionList";
-import { ConnectionBadge } from "../src/components/ConnectionBadge";
-import { EvaluationModal } from "../src/components/EvaluationModal";
-import { ReconnectingBanner } from "../src/components/ReconnectingBanner";
-import { RosterDrawer } from "../src/components/RosterDrawer";
+import { SpeakerChip } from "../src/components/SpeakerChip";
 import { StatusBar } from "../src/components/StatusBar";
 import { Toast } from "../src/components/Toast";
 import { useSession } from "../src/state/SessionContext";
+import { colors } from "../src/theme";
 
-export default function LiveMeetingScreen() {
-  // Prevent mobile screen sleep during live meeting
-  useKeepAwake();
-
+export default function LiveScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{
-    code?: string;
-    name?: string;
-    demo?: string;
-  }>();
-
-  const { width } = useWindowDimensions();
-  const isDesktop = width >= 860;
-
-  const [status, setStatus] = useState<ConnectionStatus>("connecting");
-  const [rttMs, setRttMs] = useState<number | undefined>(undefined);
-  const [offsetMs, setOffsetMs] = useState<number | undefined>(undefined);
-  const [myDeviceIdx, setMyDeviceIdx] = useState<number | null>(null);
-  const [roster, setRoster] = useState<DeviceInfo[]>([]);
-  const [micError, setMicError] = useState<string | null>(null);
-
-  // Map-based caption store: O(1) lookup by line_id, skip stale revs
-  const captionMapRef = useRef<Map<string, CaptionMessage>>(new Map());
-  const [captionOrder, setCaptionOrder] = useState<string[]>([]);
-  // Bump counter to trigger FlatList re-render only when content actually changes
-  const [captionTick, setCaptionTick] = useState(0);
-
-  const clientRef = useRef<RoundtableClient | null>(null);
-  const flatListRef = useRef<FlatList>(null);
-  const isNearBottomRef = useRef(true);
-
-  const handleCaption = useCallback((caption: CaptionMessage) => {
-    const map = captionMapRef.current;
-    const existing = map.get(caption.line_id);
-
-    // Skip stale revisions — prevents flicker from out-of-order messages
-    if (existing && existing.rev >= caption.rev) {
-      return;
-    }
-
-    map.set(caption.line_id, caption);
-
-    if (!existing) {
-      // New line — append to order list
-      setCaptionOrder((prev) => [...prev, caption.line_id]);
-    }
-
-    // Bump tick to tell FlatList something changed
-    setCaptionTick((t) => t + 1);
-  }, []);
+  const params = useLocalSearchParams<{ code?: string; name?: string }>();
   const {
     sessionCode,
     sessionName,
+    name,
     status,
     rttMs,
     offsetMs,
@@ -96,321 +25,69 @@ export default function LiveMeetingScreen() {
     myDeviceIdx,
     activeSpeakerId,
     overlappingCount,
-    isBackfilling,
-    backfillSeconds,
     isMuted,
     toggleMute,
+    connectToSession,
+    leaveSession,
     toastMessage,
     clearToast,
-    isDemoMode,
-    startDemoMode,
-    stopDemoMode,
-    leaveSession,
-    retryConnection,
-    connectToSession,
-    name,
-    evalOpen,
-    setEvalOpen,
   } = useSession();
+  const [rosterOpen, setRosterOpen] = useState(false);
 
-  const [rosterOpen, setRosterOpen] = useState(isDesktop);
-
-  // Auto-adapt roster layout when screen resizes
   useEffect(() => {
-    const wl = wakeLockRef.current;
-
-    // 1. Acquire wake lock (non-blocking — failure is silent).
-    wl.acquire();
-
-    // 2. Initialize WebSocket client.
-    const client = new RoundtableClient({
-      serverUrl,
-      sessionId: code,
-      name,
-      onStatusChange: (newStatus) => setStatus(newStatus),
-      onJoined: (msg) => setMyDeviceIdx(msg.device_idx),
-      onClockSync: (offset, rtt) => {
-        setOffsetMs(offset);
-        setRttMs(rtt);
-      },
-      onRoster: (devices) => setRoster(devices),
-      onCaption: handleCaption,
-    });
-
-    clientRef.current = client;
-    client.connect();
-
-    // 3. Initialize audio capture.
-    const audioSource = createAudioSource();
-    audioSource.onChunk((pcm, ts) => {
-      client.sendAudioFrame(pcm, ts);
-    });
-    audioSource.start().then(() => {
-      setMicError(null);
-    }).catch((err: Error) => {
-      // Surface the error to the UI with the actionable message from AudioSource.web.ts.
-      setMicError(err.message ?? "Microphone unavailable.");
-      console.warn("[live] Audio capture failed:", err.message);
-    });
-
-    return () => {
-      audioSource.stop();
-      client.disconnect();
-      wl.release();
-    };
-  }, [code, name, serverUrl, handleCaption]);
-
-  // Derive flat caption list from Map using stable insertion order
-  const captions = useMemo(() => {
-    const map = captionMapRef.current;
-    return captionOrder.map((id) => map.get(id)!).filter(Boolean);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [captionOrder, captionTick]);
-
-  // Memoize speaker lookup to avoid re-creating every render
-  const speakerMap = useMemo(() => {
-    const m = new Map<number, DeviceInfo>();
-    roster.forEach((dev) => m.set(dev.device_idx, dev));
-    return m;
-  }, [roster]);
-    setRosterOpen(isDesktop);
-  }, [isDesktop]);
-
-  // Handle direct navigation with demo param or initial connect (once on mount)
-  useEffect(() => {
-    if (params.demo === "true") {
-      startDemoMode();
-    } else {
-      const codeToConnect = params.code || sessionCode;
-      const nameToConnect = params.name || name || "Participant";
-      if (codeToConnect) {
-        connectToSession(codeToConnect, nameToConnect);
-      }
+    if (status === "disconnected") {
+      connectToSession(params.code || sessionCode, params.name || name);
     }
+    // Connect once when this route is entered. Lobby navigation may have connected already.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleEndSession = () => {
+  const handleLeave = () => {
     leaveSession();
     router.replace("/ended");
-  };
-
-  const handleToggleRoster = () => {
-    setRosterOpen((prev) => !prev);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Toast message={toastMessage} onDismiss={clearToast} />
-
-      {/* Evaluation / Benchmarks Modal (Section 58) */}
-      <EvaluationModal
-        visible={evalOpen}
-        onClose={() => setEvalOpen(false)}
-        participantCount={roster.length}
-        captionCount={captions.length}
-        rttMs={rttMs}
-        offsetMs={offsetMs}
-      />
-
-      {/* Floating Reconnection & Backfill Alert (Section 27) */}
-      <ReconnectingBanner
-        status={status}
-        isBackfilling={isBackfilling}
-        backfillSeconds={backfillSeconds}
-        onRetry={retryConnection}
-        onLeave={handleEndSession}
-      />
-
-      {/* Meeting Top Bar (Section 15 & 53) */}
-      <View className="h-14 flex-row items-center justify-between px-4 bg-bgSecondary border-b border-borderDefault z-10" style={styles.topBar}>
-        <View className="flex-row items-center gap-2.5" style={styles.leftControls}>
-          <TouchableOpacity
-            className="flex-row items-center gap-1 bg-white/5 py-1.5 px-2.5 rounded-lg border border-white/5"
-            style={styles.leaveBtn}
-            onPress={handleEndSession}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="exit-outline" size={15} color={colors.textSecondary} />
-            <Text className="text-xs font-bold text-textSecondary" style={styles.leaveBtnText}>End</Text>
-          </TouchableOpacity>
-
-          <View style={styles.brandTitleWrap}>
-            <Text className="text-sm font-extrabold text-textPrimary tracking-tight" style={styles.brandTitle}>Roundtable</Text>
-          </View>
-
-          <View className="px-2 border-l border-borderDefault max-w-[160px]" style={styles.meetingTitleWrap}>
-            <Text className="text-xs font-semibold text-textSecondary" style={styles.meetingTitle} numberOfLines={1}>
-              {sessionName || "Team Discussion"}
-            </Text>
-          </View>
-
-          {/* Join Code Pill */}
-          <View className="flex-row items-center bg-indigo-500/15 border border-indigo-500/35 rounded-full px-2.5 py-1 gap-1" style={styles.roomPill}>
-            <Text className="text-[9px] font-extrabold text-indigo-400 tracking-wider" style={styles.roomLabel}>CODE</Text>
-            <Text className="text-xs font-extrabold text-textPrimary tracking-widest font-mono" style={styles.roomCode}>{sessionCode}</Text>
-          </View>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.leaveButton} onPress={handleLeave}>
+          <Text style={styles.leaveText}>Leave</Text>
+        </TouchableOpacity>
+        <View style={styles.meetingLabel}>
+          <Text style={styles.meetingName} numberOfLines={1}>{sessionName}</Text>
+          <Text style={styles.meetingCode}>{params.code || sessionCode}</Text>
         </View>
-
-        {/* Center / Right Telemetry & Controls */}
-        <View className="flex-row items-center gap-2" style={styles.rightControls}>
-          <ConnectionBadge status={status} rttMs={rttMs} offsetMs={offsetMs} />
-
-          {/* Interactive Demo Mode Toggle (Section 40 & 41) */}
-          <TouchableOpacity
-            className="flex-row items-center gap-1.5 py-1.5 px-3 rounded-full border border-indigo-500/30 bg-indigo-500/10"
-            style={[styles.demoToggle, isDemoMode && styles.demoToggleActive]}
-            onPress={isDemoMode ? stopDemoMode : startDemoMode}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={isDemoMode ? "refresh-outline" : "play-circle-outline"}
-              size={15}
-              color={isDemoMode ? colors.warning : colors.primaryLight}
-            />
-            <Text
-              className="text-xs font-bold"
-              style={[
-                styles.demoToggleText,
-                isDemoMode && { color: colors.warning },
-              ]}
-            >
-              {isDemoMode ? "Replay Demo" : "Demo Mode"}
-            </Text>
-          </TouchableOpacity>
-
-          {/* ML & Acoustic Diagnostics Modal Trigger (Section 58) */}
-          <TouchableOpacity
-            className="p-2 rounded-lg bg-white/5 border border-white/5"
-            style={styles.evalBtn}
-            onPress={() => setEvalOpen(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="analytics-outline" size={17} color={colors.textSecondary} />
-          </TouchableOpacity>
-
-          {/* Participants Roster Toggle (Mobile & Desktop) */}
-          <TouchableOpacity
-            className="flex-row items-center gap-1 py-1.5 px-2.5 rounded-lg bg-white/5 border border-white/5"
-            style={[styles.rosterToggleBtn, rosterOpen && styles.rosterToggleActive]}
-            onPress={handleToggleRoster}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="people-outline"
-              size={17}
-              color={rosterOpen ? colors.primaryLight : colors.textSecondary}
-            />
-            <Text className="text-xs font-bold text-textSecondary" style={styles.rosterCount}>{roster.length}</Text>
-          </TouchableOpacity>
-        </View>
+        <ConnectionBadge status={status} rttMs={rttMs} offsetMs={offsetMs} />
       </View>
 
-      {/* Main Content Workspace (Split on Desktop, Full transcript on Mobile) */}
-      <View className="flex-1 flex-row bg-bgPrimary" style={styles.mainLayout}>
-        {/* Dominant Live Caption Area (The Hero Experience) */}
-        <View className="flex-1 h-full" style={styles.captionFeedWrapper}>
-          <CaptionList
-            captions={captions}
-            roster={roster}
-            activeSpeakerId={activeSpeakerId}
-            overlappingCount={overlappingCount}
-          />
-        </View>
-
-      {/* Microphone permission / capture error banner */}
-      {micError && (
-        <PermissionError
-          message={micError}
-          onRetry={() => {
-            // Clear the error so the user can see the retry is happening;
-            // a full remount would be needed to retry capture, so we just clear.
-            setMicError(null);
-          }}
-        />
-      )}
-
-      {/* Live Captions Feed */}
-      <View style={styles.feedContainer}>
-        {captions.length === 0 ? (
-          <View style={styles.emptyFeed}>
-            <View style={styles.emptyPulse} />
-            <Text style={styles.emptyFeedTitle}>Listening for audio...</Text>
-            <Text style={styles.emptyFeedSubtitle}>
-              Speak or stream synthetic frames from joined devices to see live
-              captions here.
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={captions}
-            extraData={captionTick}
-            keyExtractor={(item) => item.line_id}
-            renderItem={({ item }) => {
-              const speakerInfo = item.speaker_id
-                ? speakerMap.get(item.speaker_id)
-                : undefined;
-              return (
-                <CaptionLine
-                  caption={item}
-                  speakerName={speakerInfo?.name}
-                  speakerColor={speakerInfo?.color}
-                />
-              );
-            }}
-            contentContainerStyle={styles.captionsList}
-            onScroll={(e) => {
-              const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
-              isNearBottomRef.current =
-                contentOffset.y + layoutMeasurement.height >= contentSize.height - 80;
-            }}
-            scrollEventThrottle={200}
-            onContentSizeChange={() => {
-              if (isNearBottomRef.current) {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }
-            }}
-        {/* Desktop Roster Side Panel */}
-        {isDesktop && (
-          <RosterDrawer
-            visible={rosterOpen}
-            onClose={() => setRosterOpen(false)}
-            devices={roster}
-            myDeviceIdx={myDeviceIdx}
-            activeSpeakerId={activeSpeakerId}
-            isMobile={false}
-          />
+      <View style={styles.rosterSection}>
+        <TouchableOpacity onPress={() => setRosterOpen((open) => !open)}>
+          <Text style={styles.rosterTitle}>CONNECTED DEVICES ({roster.length}) · {rosterOpen ? "hide" : "show"}</Text>
+        </TouchableOpacity>
+        {rosterOpen && (
+          <ScrollView horizontal contentContainerStyle={styles.rosterList}>
+            {roster.map((device) => (
+              <SpeakerChip
+                key={device.device_idx}
+                speakerId={device.device_idx}
+                name={`${device.name}${device.device_idx === myDeviceIdx ? " (You)" : ""}`}
+                color={device.color}
+              />
+            ))}
+          </ScrollView>
         )}
       </View>
 
-      {/* Mic Status Footer */}
-      <View style={styles.footer}>
-        <View style={styles.micIndicator}>
-          <View style={[styles.micPulseDot, micError ? styles.micDotError : undefined]} />
-          <Text style={styles.micText}>
-            {micError
-              ? "Mic: Permission required"
-              : "Mic: 16 kHz · AudioWorklet streaming"}
-          </Text>
-        </View>
-        {myDeviceIdx !== null && (
-          <Text style={styles.deviceTag}>Device #{myDeviceIdx}</Text>
-        )}
-      </View>
-      {/* Mobile Bottom Sheet Roster */}
-      {!isDesktop && (
-        <RosterDrawer
-          visible={rosterOpen}
-          onClose={() => setRosterOpen(false)}
-          devices={roster}
-          myDeviceIdx={myDeviceIdx}
+      <View style={styles.captionArea}>
+        <CaptionList
+          captions={captions}
+          roster={roster}
           activeSpeakerId={activeSpeakerId}
-          isMobile={true}
+          overlappingCount={overlappingCount}
         />
-      )}
+      </View>
 
-      {/* Bottom Status Bar (Section 29 & 54) */}
       <StatusBar
         isListening={status === "connected"}
         participantCount={roster.length}
@@ -424,145 +101,25 @@ export default function LiveMeetingScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
-  topBar: {
-    height: 56,
+  safeArea: { flex: 1, backgroundColor: colors.bgPrimary },
+  header: {
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    gap: 8,
     backgroundColor: colors.bgSecondary,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderDefault,
-    zIndex: 10,
   },
-  leftControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  leaveBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: radii.md,
-  },
-  leaveBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.textSecondary,
-  },
-  brandTitleWrap: {
-    display: Platform.OS === "web" ? "flex" : "none",
-  },
-  brandTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: colors.textPrimary,
-    letterSpacing: -0.2,
-  },
-  meetingTitleWrap: {
-    paddingHorizontal: 8,
-    borderLeftWidth: 1,
-    borderLeftColor: colors.borderDefault,
-    maxWidth: 160,
-  },
-  meetingTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.textSecondary,
-  },
-  roomPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.3)",
-    borderRadius: radii.full,
-    paddingHorizontal: 9,
-    paddingVertical: 3.5,
-    gap: 5,
-  },
-  roomLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: colors.primaryLight,
-  },
-  roomCode: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.textPrimary,
-    fontFamily: "monospace",
-    letterSpacing: 1,
-  },
-  rightControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  demoToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.35)",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: radii.full,
-  },
-  demoToggleActive: {
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    borderColor: "rgba(245, 158, 11, 0.4)",
-  },
-  demoToggleText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.primaryLight,
-  },
-  evalBtn: {
-    padding: 7,
-    borderRadius: radii.md,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-  },
-  rosterToggleBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: radii.md,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-  },
-  rosterToggleActive: {
-    backgroundColor: "rgba(99, 102, 241, 0.2)",
-    borderColor: colors.primaryLight,
-  },
-  rosterCount: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.textSecondary,
-  },
-  micDotError: {
-    backgroundColor: "#EF4444",
-  },
-  deviceTag: {
-    fontSize: 12,
-    color: "#64748B",
-    fontFamily: "monospace",
-  mainLayout: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: colors.bgPrimary,
-  },
-  captionFeedWrapper: {
-    flex: 1,
-    height: "100%",
-  },
+  leaveButton: { paddingVertical: 8, paddingHorizontal: 10 },
+  leaveText: { color: colors.textSecondary, fontWeight: "700" },
+  meetingLabel: { flex: 1, paddingHorizontal: 8 },
+  meetingName: { color: colors.textPrimary, fontWeight: "700" },
+  meetingCode: { color: colors.textMuted, fontSize: 11, fontFamily: "monospace" },
+  rosterSection: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.borderDefault },
+  rosterTitle: { color: colors.textMuted, fontSize: 11, fontWeight: "700" },
+  rosterList: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 10 },
+  captionArea: { flex: 1 },
 });

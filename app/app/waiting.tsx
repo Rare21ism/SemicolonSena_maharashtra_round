@@ -33,19 +33,9 @@ export default function MeetingLobbyScreen() {
 
   const [copied, setCopied] = useState(false);
 
-  // Subtle join notification toasts per Section 13
   useEffect(() => {
-    const timer1 = setTimeout(() => {
-      showToast("Pam joined the meeting");
-    }, 1500);
-    const timer2 = setTimeout(() => {
-      showToast("Dwight joined the meeting");
-    }, 3200);
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-    };
-  }, [showToast]);
+    if (sessionCode) connectToSession(sessionCode, name);
+  }, [connectToSession, name, sessionCode]);
 
   const handleCopyCode = () => {
     Clipboard.setString(sessionCode);
@@ -117,7 +107,7 @@ export default function MeetingLobbyScreen() {
           <View style={styles.rosterHeader}>
             <Text style={styles.rosterLabel}>PARTICIPANTS</Text>
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{roster.length} Ready</Text>
+              <Text style={styles.countText}>{roster.length} connected</Text>
             </View>
           </View>
 

@@ -30,13 +30,17 @@ export default function CreateMeetingScreen() {
 
   const [loading, setLoading] = useState(false);
   const [created, setCreated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleCreate = async () => {
     setLoading(true);
+    setError(null);
     try {
       await createSessionOnBackend(sessionName || "Team Discussion");
       setIsHost(true);
       setCreated(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create the meeting.");
     } finally {
       setLoading(false);
     }
@@ -109,6 +113,8 @@ export default function CreateMeetingScreen() {
                 }
               />
 
+              {error && <Text style={styles.errorText}>{error}</Text>}
+
               <Button
                 title="Create Meeting"
                 variant="primary"
@@ -133,7 +139,7 @@ export default function CreateMeetingScreen() {
               <View style={styles.participantPill}>
                 <View style={styles.onlineDot} />
                 <Text style={styles.participantText}>
-                  Participants: 1 (You - Host)
+                Share the meeting code to invite participants.
                 </Text>
               </View>
 
@@ -169,6 +175,11 @@ export default function CreateMeetingScreen() {
 }
 
 const styles = StyleSheet.create({
+  errorText: {
+    color: colors.danger,
+    textAlign: "center",
+    marginTop: 12,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: colors.bgPrimary,

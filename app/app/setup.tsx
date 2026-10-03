@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Platform,
   ScrollView,
@@ -21,57 +21,65 @@ export default function AudioSetupScreen() {
   const { sessionCode, sessionName } = useSession();
 
   const [hasPermission, setHasPermission] = useState<boolean>(false);
-  const [level, setLevel] = useState<number>(0.55);
-  const [quality, setQuality] = useState<"good" | "fair" | "poor">("good");
-  const [selectedDevice, setSelectedDevice] = useState("Default System Microphone");
+  const [level, setLevel] = useState<number>(0);
+  const [quality, setQuality] = useState<"good" | "fair" | "poor">("poor");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationRef = useRef<number | null>(null);
 
-  // Request mic permission on Web or mock for native
+  useEffect(() => () => {
+    if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      void audioContextRef.current.close();
+    }
+  }, []);
+
+  // Request and meter a real microphone stream. Permission failures stay visible.
   const requestPermission = async () => {
-    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.mediaDevices) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setHasPermission(true);
-        // Connect web audio meter
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 64;
-        const source = audioCtx.createMediaStreamSource(stream);
-        source.connect(analyser);
+    setPermissionError(null);
+    if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setPermissionError("Native microphone capture is unavailable in this Expo Go build. Open Roundtable in a supported browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const audioCtx = new AudioContext();
+      audioContextRef.current = audioCtx;
+      await audioCtx.resume();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const muted = audioCtx.createGain();
+      muted.gain.value = 0;
+      source.connect(analyser);
+      analyser.connect(muted);
+      muted.connect(audioCtx.destination);
 
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const updateLevel = () => {
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-          }
-          const avg = sum / dataArray.length / 255;
-          setLevel(Math.max(0.1, avg * 1.8));
-          if (avg > 0.05) setQuality("good");
-          requestAnimationFrame(updateLevel);
-        };
-        updateLevel();
-      } catch (e) {
-        console.warn("Permission denied or unavailable, using simulation:", e);
-        setHasPermission(true);
-      }
-    } else {
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateLevel = () => {
+        analyser.getByteTimeDomainData(dataArray);
+        let sumSquares = 0;
+        for (const sample of dataArray) {
+          const normalized = (sample - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+        setLevel(Math.min(1, rms * 4));
+        setQuality(rms > 0.02 ? "good" : "poor");
+        animationRef.current = requestAnimationFrame(updateLevel);
+      };
       setHasPermission(true);
+      updateLevel();
+    } catch (error) {
+      console.warn("Microphone permission or capture failed:", error);
+      setPermissionError(error instanceof Error ? error.message : "Microphone permission was denied.");
+      setHasPermission(false);
     }
   };
-
-  // Simulate audio level activity if no real mic attached
-  useEffect(() => {
-    if (!hasPermission) return;
-    const interval = setInterval(() => {
-      setLevel((prev) => {
-        const delta = (Math.random() - 0.48) * 0.2;
-        return Math.min(0.85, Math.max(0.15, prev + delta));
-      });
-    }, 150);
-    return () => clearInterval(interval);
-  }, [hasPermission]);
 
   const handleContinue = () => {
     router.push("/enroll");
@@ -116,6 +124,7 @@ export default function AudioSetupScreen() {
               generate live captions for the meeting.
             </Text>
 
+            {permissionError && <Text style={styles.permissionError}>{permissionError}</Text>}
             <Button
               title="Allow microphone"
               variant="primary"
@@ -125,12 +134,6 @@ export default function AudioSetupScreen() {
               style={styles.btnFull}
             />
 
-            <TouchableOpacity
-              style={styles.skipBtn}
-              onPress={() => setHasPermission(true)}
-            >
-              <Text style={styles.skipBtnText}>Continue with system default</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           /* Permission Granted & Active Audio Level State (Section 11) */
@@ -163,7 +166,7 @@ export default function AudioSetupScreen() {
             <View style={styles.deviceRow}>
               <Ionicons name="hardware-chip-outline" size={16} color={colors.textMuted} />
               <Text style={styles.deviceText} numberOfLines={1}>
-                {selectedDevice}
+                Microphone input
               </Text>
             </View>
 
@@ -223,6 +226,11 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
+  },
+  permissionError: {
+    color: colors.danger,
+    textAlign: "center",
+    marginBottom: 12,
   },
   scrollContent: {
     paddingHorizontal: 20,

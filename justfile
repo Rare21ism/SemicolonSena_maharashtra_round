@@ -13,21 +13,21 @@ dev-server:
 
 # Start Expo universal app development server for Expo Go
 dev-app:
-    npm --workspace=app run start -- --go -c
+    npm.cmd --workspace=app run start -- --go -c
 
 # Launch Roundtable app in the web browser
 dev-web:
-    npm --workspace=app run web
+    npm.cmd --workspace=app run web
 
 alias web-dev := dev-web
 
 # Start Expo dev server with cloud tunnel for remote mobile testing in Expo Go
 tunnel:
-    npm --workspace=app run start -- --tunnel --go -c
+    npm.cmd --workspace=app run start -- --tunnel --go -c
 
 # Run full test suite (TypeScript protocol tests + Python backend tests)
 test:
-    npm --workspace=@roundtable/protocol test
+    npm.cmd --workspace=@roundtable/protocol test
     cd server; python -m uv run --extra dev pytest
 
 # Run integration test with simulated clients

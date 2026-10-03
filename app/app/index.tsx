@@ -23,7 +23,6 @@ export default function HomeScreen() {
     setName,
     serverUrl,
     setServerUrl,
-    startDemoMode,
   } = useSession();
 
   const [showConfig, setShowConfig] = useState(false);
@@ -34,14 +33,6 @@ export default function HomeScreen() {
 
   const handleJoin = () => {
     router.push("/join");
-  };
-
-  const handleQuickDemo = () => {
-    startDemoMode();
-    router.push({
-      pathname: "/live",
-      params: { demo: "true" },
-    });
   };
 
   return (
@@ -64,15 +55,6 @@ export default function HomeScreen() {
               <Text className="text-xl font-extrabold text-textPrimary tracking-tight" style={styles.brandTitle}>Roundtable</Text>
             </View>
 
-            <TouchableOpacity
-              className="flex-row items-center gap-2 py-1.5 px-3.5 rounded-full bg-indigo-500/15 border border-indigo-500/35"
-              style={styles.demoPill}
-              onPress={handleQuickDemo}
-              activeOpacity={0.8}
-            >
-              <View className="w-2 h-2 rounded-full bg-indigo-400" style={styles.demoPulseDot} />
-              <Text className="text-xs font-bold text-indigo-400" style={styles.demoPillText}>Interactive Demo</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Hero Section (Section 8) */}
@@ -277,28 +259,6 @@ const styles = StyleSheet.create({
   brandTitle: {
     ...typography.h3,
     letterSpacing: -0.3,
-  },
-  demoPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(99, 102, 241, 0.14)",
-    borderColor: "rgba(99, 102, 241, 0.4)",
-    borderWidth: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: radii.full,
-    gap: 6,
-  },
-  demoPulseDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: colors.primaryLight,
-  },
-  demoPillText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primaryLight,
   },
   heroSection: {
     alignItems: "center",
