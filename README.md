@@ -9,8 +9,8 @@ Roundtable turns every participant's phone and laptop into a synchronized microp
 Get the end-to-end loop running in seconds:
 
 ```bash
-# 1. Install dependencies
-npm install; cd server; uv sync --dev; cd ..
+# 1. Install dependencies and the optional real ML stack
+npm install; cd server; uv sync --extra dev --extra ml; uv run python scripts/download_models.py; cd ..
 
 # 2. Start the FastAPI backend server (port 8000)
 just dev-server
@@ -19,11 +19,19 @@ just dev-server
 just dev-web
 ```
 
-Open `http://localhost:8081`, click **+ Create New Session**, and see real-time captions stream live!
+Open `http://localhost:8081`, create a session, allow microphone access, and speak during the five-second sample. Real ASR requires the optional ML dependencies and model files installed above. Session creation reports an error if the real model pipeline cannot initialize; it never switches to mock captions.
 
-To simulate additional microphone devices in the room, open a new terminal:
+For developer-only synthetic client testing, explicitly start the backend in mock mode:
+
+```powershell
+$env:ROUNDTABLE_PIPELINE = "mock"
+just dev-server
+```
+
+Then run the fake clients in another terminal:
+
 ```bash
-uv run python server/scripts/fake_client.py --devices 3
+just fake-clients 3
 ```
 
 ---

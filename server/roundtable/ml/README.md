@@ -11,10 +11,12 @@ This package will contain the real production pipeline that implements `roundtab
 - Streaming speech-to-text (ASR) via `faster-whisper`, `sherpa-onnx`, or PyTorch
 
 ## Enabling Real Pipeline
-When ready, implement `RealPipeline(Pipeline)` in this package and toggle the environment variable:
+Select the real pipeline with the environment variable (this is now the server default):
 ```bash
 export ROUNDTABLE_PIPELINE=real
 ```
-(Default is `mock`).
+The mock pipeline is available only when explicitly selected with
+`ROUNDTABLE_PIPELINE=mock` for local development and tests. Missing real model
+dependencies or weights cause session creation to fail clearly.
 
 ML only. Never block the event loop. Mock pipeline must keep working. Tune thresholds via config, not magic numbers. Don't add GCC-PHAT, embeddings, or separation models unless asked.

@@ -7,6 +7,7 @@
     "strict": true,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    "allowArbitraryExtensions": true,
     "baseUrl": ".",
     "paths": {
       "@roundtable/protocol": [
@@ -16,7 +17,8 @@
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "nativewind-env.d.ts"
   ],
   "extends": "expo/tsconfig.base"
 }

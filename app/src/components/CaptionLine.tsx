@@ -1,43 +1,126 @@
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef } from "react";
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { CaptionMessage } from "@roundtable/protocol";
-import { SpeakerChip } from "./SpeakerChip";
+import { colors, getSpeakerColor, radii, spacing, typography } from "../theme";
+import { ParticipantAvatar } from "./ParticipantAvatar";
 
-interface CaptionLineProps {
-  caption: CaptionMessage;
+export interface ExtendedCaptionMessage extends CaptionMessage {
+  isOverlapping?: boolean;
   speakerName?: string;
   speakerColor?: string;
 }
 
+interface CaptionLineProps {
+  caption: ExtendedCaptionMessage;
+  speakerName?: string;
+  speakerColor?: string;
+  isCurrentSpeaker?: boolean;
+}
+
 export const CaptionLine: React.FC<CaptionLineProps> = React.memo(
-  ({ caption, speakerName, speakerColor }) => {
+  ({ caption, speakerName, speakerColor, isCurrentSpeaker = false }) => {
     const isDraft = caption.state === "draft";
-    const startSec = (caption.t_start / 1000.0).toFixed(1);
+    const fadeAnim = useRef(new Animated.Value(0.4)).current;
+
+    // Resolve speaker color & name
+    const fallback = getSpeakerColor(caption.speaker_id);
+    const resolvedColor = speakerColor || caption.speakerColor || fallback.color;
+    const resolvedName =
+      speakerName ||
+      caption.speakerName ||
+      (caption.speaker_id !== null ? `Participant ${caption.speaker_id}` : "Speaker");
+
+    // Format start time into mm:ss or seconds
+    const formatTime = (ms: number) => {
+      const totalSec = Math.floor(ms / 1000);
+      const minutes = Math.floor(totalSec / 60);
+      const seconds = totalSec % 60;
+      if (minutes > 0) {
+        return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+      }
+      return `${(ms / 1000).toFixed(1)}s`;
+    };
+
+    // Smooth subtle flash on revision update
+    useEffect(() => {
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, [caption.rev, caption.text, fadeAnim]);
 
     return (
-      <View style={[styles.container, isDraft && styles.draftContainer]}>
-        <View style={styles.header}>
-          <SpeakerChip
+      <Animated.View
+        className="flex-row py-3.5 px-4 mb-2 rounded-xl border border-borderDefault bg-bgCard/60"
+        style={[
+          styles.container,
+          isDraft ? styles.containerDraft : styles.containerFinal,
+          caption.isOverlapping && styles.containerOverlap,
+          { opacity: fadeAnim },
+        ]}
+      >
+        {/* Left Avatar Column */}
+        <View className="mr-3 pt-0.5" style={styles.avatarCol}>
+          <ParticipantAvatar
+            name={resolvedName}
             speakerId={caption.speaker_id}
-            name={speakerName}
-            color={speakerColor}
+            color={resolvedColor}
+            isSpeaking={isCurrentSpeaker || isDraft}
+            size={36}
           />
-          <View style={styles.metaRow}>
-            {isDraft ? (
-              <View style={styles.draftBadge}>
-                <Text style={styles.draftBadgeText}>DRAFT rev.{caption.rev}</Text>
-              </View>
-            ) : (
-              <Text style={styles.revText}>rev.{caption.rev}</Text>
-            )}
-            <Text style={styles.timeText}>{startSec}s</Text>
-          </View>
         </View>
 
-        <Text style={[styles.captionText, isDraft && styles.draftCaptionText]}>
-          {caption.text}
-        </Text>
-      </View>
+        {/* Right Content Column */}
+        <View className="flex-1 min-w-0" style={styles.contentCol}>
+          <View className="flex-row items-center justify-between mb-1 pb-1" style={styles.headerRow}>
+            <View className="flex-row items-center gap-2" style={styles.speakerIdentityRow}>
+              <Text className="text-xs font-black tracking-wider uppercase" style={[styles.speakerName, { color: resolvedColor }]}>
+                {resolvedName.toUpperCase()}
+              </Text>
+
+              {caption.isOverlapping && (
+                <View style={styles.overlapBadge}>
+                  <Text style={styles.overlapBadgeText}>OVERLAP</Text>
+                </View>
+              )}
+            </View>
+
+            <View className="flex-row items-center gap-2" style={styles.metaRow}>
+              {isDraft ? (
+                <View style={styles.draftBadge}>
+                  <View style={styles.draftPulseDot} />
+                  <Text style={styles.draftBadgeText}>LIVE</Text>
+                </View>
+              ) : (
+                caption.rev > 1 && (
+                  <Text style={styles.revTag}>rev.{caption.rev}</Text>
+                )
+              )}
+              <Text style={styles.timeTag}>{formatTime(caption.t_start)}</Text>
+            </View>
+          </View>
+
+          {/* Transcript Text (Hero readability) */}
+          <Text
+            className={isDraft ? "text-lg font-medium leading-relaxed text-textSecondary italic" : "text-lg font-bold leading-relaxed text-textPrimary"}
+            style={[
+              styles.captionBody,
+              isDraft ? styles.captionBodyDraft : styles.captionBodyFinal,
+            ]}
+          >
+            {caption.text}
+            {isDraft && <Text style={styles.draftCaret}> ▎</Text>}
+          </Text>
+        </View>
+      </Animated.View>
     );
   },
   (prev, next) =>
@@ -45,34 +128,74 @@ export const CaptionLine: React.FC<CaptionLineProps> = React.memo(
     prev.caption.rev === next.caption.rev &&
     prev.caption.state === next.caption.state &&
     prev.caption.text === next.caption.text &&
+    prev.caption.speaker_id === next.caption.speaker_id &&
+    prev.caption.isOverlapping === next.caption.isOverlapping &&
     prev.speakerName === next.speakerName &&
-    prev.speakerColor === next.speakerColor
+    prev.speakerColor === next.speakerColor &&
+    prev.isCurrentSpeaker === next.isCurrentSpeaker
 );
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 14,
-    marginVertical: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    flexDirection: "row",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: radii.lg,
+    marginVertical: 4,
+    borderLeftWidth: 3,
+    backgroundColor: "transparent",
   },
-  draftContainer: {
-    backgroundColor: "#131C2E",
-    borderColor: "rgba(148, 163, 184, 0.2)",
-    borderStyle: "dashed",
+  containerFinal: {
+    borderLeftColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(19, 28, 46, 0.45)",
   },
-  header: {
+  containerDraft: {
+    borderLeftColor: colors.warning,
+    backgroundColor: "rgba(19, 28, 46, 0.25)",
+  },
+  containerOverlap: {
+    borderLeftColor: colors.danger,
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
+  },
+  avatarCol: {
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 2,
+  },
+  contentCol: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+  speakerIdentityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  speakerName: {
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  overlapBadge: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    borderColor: "rgba(239, 68, 68, 0.35)",
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  overlapBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: colors.danger,
+    letterSpacing: 0.5,
   },
   metaRow: {
     flexDirection: "row",
@@ -80,37 +203,50 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   draftBadge: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "rgba(245, 158, 11, 0.15)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    borderColor: "rgba(245, 158, 11, 0.4)",
     borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.3)",
+    borderRadius: radii.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    gap: 4,
+  },
+  draftPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.warning,
   },
   draftBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#F59E0B",
-    textTransform: "uppercase",
+    fontSize: 9,
+    fontWeight: "800",
+    color: colors.warning,
+    letterSpacing: 0.6,
   },
-  revText: {
+  revTag: {
     fontSize: 11,
-    color: "#64748B",
+    color: colors.textMuted,
     fontFamily: "monospace",
   },
-  timeText: {
+  timeTag: {
     fontSize: 11,
-    color: "#94A3B8",
+    color: colors.textMuted,
     fontFamily: "monospace",
   },
-  captionText: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: "#F8FAFC",
-    fontWeight: "400",
+  captionBody: {
+    ...typography.caption,
   },
-  draftCaptionText: {
-    color: "#94A3B8",
+  captionBodyFinal: {
+    color: colors.textPrimary,
+  },
+  captionBodyDraft: {
+    color: "#CBD5E1",
     fontStyle: "italic",
+  },
+  draftCaret: {
+    color: colors.warning,
+    fontSize: 14,
   },
 });

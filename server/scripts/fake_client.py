@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Optional
 import httpx
 import numpy as np
-import soundfile as sf
 import websockets
 
 from roundtable.protocol import (
@@ -29,6 +28,8 @@ from roundtable.protocol import (
 
 def load_wav_pcm(wav_path: str | Path, target_sr: int = 16000) -> np.ndarray:
     """Loads a WAV file as int16 16 kHz mono PCM."""
+    import soundfile as sf
+
     data, sr = sf.read(str(wav_path), dtype="float32")
     if data.ndim > 1:
         data = data.mean(axis=1)
