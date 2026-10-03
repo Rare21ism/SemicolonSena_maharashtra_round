@@ -225,6 +225,19 @@ class SessionManager:
             self.sessions_by_code[code] = session
             return session
 
+    async def create_or_get_session(self, code_or_id: str) -> Session:
+        async with self._lock:
+            existing = self.get_session(code_or_id)
+            if existing:
+                return existing
+            clean_str = code_or_id.strip()
+            code = clean_str.upper() if len(clean_str) <= 8 else self._generate_code()
+            session_id = clean_str if len(clean_str) > 8 else uuid.uuid4().hex
+            session = Session(session_id=session_id, code=code)
+            self.sessions_by_id[session_id] = session
+            self.sessions_by_code[code] = session
+            return session
+
     def get_session(self, session_id_or_code: str) -> Optional[Session]:
         session_id_or_code = session_id_or_code.strip()
         if session_id_or_code in self.sessions_by_id:
