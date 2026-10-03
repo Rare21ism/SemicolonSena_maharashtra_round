@@ -1,193 +1,233 @@
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { colors, radii, spacing, typography } from "../src/theme";
+import { Button } from "../src/components/Button";
+import { Input } from "../src/components/Input";
+import { useSession } from "../src/state/SessionContext";
 
-const DEFAULT_SERVER_URL =
-  process.env.EXPO_PUBLIC_SERVER_URL || "http://localhost:8000";
-
-export default function JoinScreen() {
+export default function HomeScreen() {
   const router = useRouter();
-  const [name, setName] = useState(`Device-${Math.floor(Math.random() * 900 + 100)}`);
-  const [code, setCode] = useState("");
-  const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL);
-  const [loading, setLoading] = useState(false);
+  const {
+    name,
+    setName,
+    serverUrl,
+    setServerUrl,
+    startDemoMode,
+  } = useSession();
+
   const [showConfig, setShowConfig] = useState(false);
 
-  const handleCreateSession = async () => {
-    if (!name.trim()) {
-      Alert.alert("Name Required", "Please enter a device or participant name.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const base = serverUrl.trim().replace(/\/+$/, "");
-      const res = await fetch(`${base}/sessions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!res.ok) {
-        throw new Error(`Server returned HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      router.push({
-        pathname: "/live",
-        params: {
-          code: data.code,
-          name: name.trim(),
-          serverUrl: base,
-        },
-      });
-    } catch (err: any) {
-      Alert.alert("Connection Failed", `Could not create session: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
+  const handleCreate = () => {
+    router.push("/create");
   };
 
-  const handleJoinSession = async () => {
-    const cleanCode = code.trim().toUpperCase();
-    if (cleanCode.length !== 6) {
-      Alert.alert("Invalid Code", "Please enter a valid 6-letter session code.");
-      return;
-    }
-    if (!name.trim()) {
-      Alert.alert("Name Required", "Please enter a device or participant name.");
-      return;
-    }
+  const handleJoin = () => {
+    router.push("/join");
+  };
 
-    setLoading(true);
-    try {
-      const base = serverUrl.trim().replace(/\/+$/, "");
-      const res = await fetch(`${base}/sessions/${cleanCode}`);
-      if (!res.ok) {
-        throw new Error(`Session ${cleanCode} not found.`);
-      }
-
-      router.push({
-        pathname: "/live",
-        params: {
-          code: cleanCode,
-          name: name.trim(),
-          serverUrl: base,
-        },
-      });
-    } catch (err: any) {
-      Alert.alert("Join Failed", err.message || "Failed to reach server");
-    } finally {
-      setLoading(false);
-    }
+  const handleQuickDemo = () => {
+    startDemoMode();
+    router.push({
+      pathname: "/live",
+      params: { demo: "true" },
+    });
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView className="flex-1 bg-bgPrimary" style={styles.safeArea}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardContainer}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.container}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.brandContainer}>
-            <View style={styles.logoBadge}>
-              <Text style={styles.logoBadgeText}>RT</Text>
+        <ScrollView
+          className="px-5 py-4 pb-12 max-w-[580px] w-full mx-auto"
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Top Brand Header */}
+          <View className="flex-row items-center justify-between mb-8" style={styles.topNav}>
+            <View className="flex-row items-center gap-2.5" style={styles.brandRow}>
+              <View className="w-8 h-8 rounded-lg bg-indigo-600 items-center justify-center shadow-lg" style={styles.logoBadge}>
+                <Ionicons name="radio" size={18} color="#FFFFFF" />
+              </View>
+              <Text className="text-xl font-extrabold text-textPrimary tracking-tight" style={styles.brandTitle}>Roundtable</Text>
             </View>
-            <Text style={styles.title}>Roundtable</Text>
-            <Text style={styles.subtitle}>
-              Ad-Hoc Microphone Array & Live Captions
+
+            <TouchableOpacity
+              className="flex-row items-center gap-2 py-1.5 px-3.5 rounded-full bg-indigo-500/15 border border-indigo-500/35"
+              style={styles.demoPill}
+              onPress={handleQuickDemo}
+              activeOpacity={0.8}
+            >
+              <View className="w-2 h-2 rounded-full bg-indigo-400" style={styles.demoPulseDot} />
+              <Text className="text-xs font-bold text-indigo-400" style={styles.demoPillText}>Interactive Demo</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Hero Section (Section 8) */}
+          <View className="items-center mb-8" style={styles.heroSection}>
+            <View className="bg-indigo-500/10 border border-indigo-500/25 px-3.5 py-1 rounded-full mb-3.5" style={styles.heroTag}>
+              <Text className="text-[10px] font-black text-indigo-400 tracking-widest" style={styles.heroTagText}>
+                REAL-TIME MULTI-DEVICE MEETING CAPTIONS
+              </Text>
+            </View>
+
+            <Text className="text-3xl font-extrabold text-center text-textPrimary leading-tight mb-3" style={styles.heroTitle}>
+              Live captions that{"\n"}
+              <Text className="text-indigo-400" style={styles.heroGradient}>know who's speaking.</Text>
+            </Text>
+
+            <Text className="text-sm text-center text-textMuted leading-relaxed max-w-[460px]" style={styles.heroSubtitle}>
+              One conversation. Multiple devices. One clearer transcript.
+              Roundtable combines audio from nearby phones and laptops to create
+              low-latency, speaker-attributed subtitles for real meetings.
             </Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>Your Name / Device</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Alice's Phone"
-              placeholderTextColor="#64748B"
+          {/* Interactive Multi-Device Array Illustration */}
+          <View className="w-full bg-bgCard border border-borderDefault rounded-2xl p-6 items-center mb-8 relative overflow-hidden" style={styles.illustrationCard}>
+            <View style={styles.circleOrbitOuter}>
+              <View style={styles.circleOrbitInner}>
+                <View style={styles.centerTable}>
+                  <Ionicons name="chatbubbles" size={24} color={colors.primaryLight} />
+                  <Text style={styles.centerTableText}>FUSION</Text>
+                </View>
+              </View>
+
+              {/* Surrounding Node 1: Jim */}
+              <View style={[styles.nodeBubble, styles.nodeLaptop]}>
+                <Ionicons name="laptop-outline" size={15} color="#8B5CF6" />
+                <Text style={styles.nodeText}>Jim (Laptop)</Text>
+              </View>
+
+              {/* Surrounding Node 2: Pam */}
+              <View style={[styles.nodeBubble, styles.nodePhoneA]}>
+                <Ionicons name="phone-portrait-outline" size={15} color="#0284C7" />
+                <Text style={styles.nodeText}>Pam (Phone)</Text>
+              </View>
+
+              {/* Surrounding Node 3: Dwight */}
+              <View style={[styles.nodeBubble, styles.nodePhoneB]}>
+                <Ionicons name="phone-portrait-outline" size={15} color="#10B981" />
+                <Text style={styles.nodeText}>Dwight (Phone)</Text>
+              </View>
+            </View>
+
+            <View style={styles.liveCaptionSnippet}>
+              <View style={styles.snippetDot} />
+              <Text style={styles.snippetSpeaker}>MICHAEL: </Text>
+              <Text style={styles.snippetText} numberOfLines={1}>
+                "HEEELOO! We are going to crush this quarter."
+              </Text>
+            </View>
+          </View>
+
+          {/* User Display Name & Primary Actions Card */}
+          <View className="w-full bg-bgCard border border-borderDefault rounded-2xl p-6 mb-6 shadow-xl" style={styles.actionCard}>
+            <Input
+              label="YOUR DISPLAY NAME"
+              placeholder="e.g. Jim, Pam, Dwight"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
+              icon={
+                <Ionicons
+                  name="person-outline"
+                  size={18}
+                  color={colors.textMuted}
+                />
+              }
             />
 
-            <View style={styles.dividerRow}>
-              <View style={styles.divider} />
-              <Text style={styles.dividerText}>START OR JOIN</Text>
-              <View style={styles.divider} />
+            <View style={styles.buttonStack}>
+              <Button
+                title="Create Meeting"
+                variant="primary"
+                size="lg"
+                icon={<Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />}
+                onPress={handleCreate}
+              />
+
+              <Button
+                title="Join Meeting"
+                variant="secondary"
+                size="lg"
+                icon={<Ionicons name="enter-outline" size={20} color={colors.textPrimary} />}
+                onPress={handleJoin}
+              />
             </View>
-
-            <TouchableOpacity
-              style={[styles.primaryButton, loading && styles.buttonDisabled]}
-              onPress={handleCreateSession}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>+ Create New Session</Text>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.orRow}>
-              <Text style={styles.orText}>— or join existing room —</Text>
-            </View>
-
-            <Text style={styles.label}>6-Letter Room Code</Text>
-            <TextInput
-              style={[styles.input, styles.codeInput]}
-              placeholder="ABCDEF"
-              placeholderTextColor="#64748B"
-              value={code}
-              onChangeText={(text) => setCode(text.toUpperCase())}
-              maxLength={6}
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
-
-            <TouchableOpacity
-              style={[
-                styles.secondaryButton,
-                (!code || loading) && styles.buttonDisabled,
-              ]}
-              onPress={handleJoinSession}
-              disabled={!code || loading}
-            >
-              <Text style={styles.secondaryButtonText}>Join Room</Text>
-            </TouchableOpacity>
 
             {/* Server Config Toggle */}
             <TouchableOpacity
               style={styles.toggleConfig}
               onPress={() => setShowConfig(!showConfig)}
             >
+              <Ionicons
+                name={showConfig ? "chevron-up" : "chevron-down"}
+                size={14}
+                color={colors.textMuted}
+              />
               <Text style={styles.toggleConfigText}>
-                {showConfig ? "▾ Hide Server URL" : "▸ Configure Server URL"}
+                {showConfig ? "Hide server settings" : "Configure server endpoint"}
               </Text>
             </TouchableOpacity>
 
             {showConfig && (
-              <View style={styles.configContainer}>
-                <Text style={styles.label}>Server Base URL</Text>
-                <TextInput
-                  style={[styles.input, styles.configInput]}
+              <View style={styles.configArea}>
+                <Input
+                  label="BACKEND URL"
                   value={serverUrl}
                   onChangeText={setServerUrl}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  placeholder="http://localhost:8000"
                 />
               </View>
             )}
+          </View>
+
+          {/* Feature Highlights Grid */}
+          <View style={styles.featuresRow}>
+            <View style={styles.featureItem}>
+              <View style={[styles.featureIcon, { backgroundColor: "rgba(139, 92, 246, 0.15)" }]}>
+                <Ionicons name="hardware-chip-outline" size={18} color="#8B5CF6" />
+              </View>
+              <Text style={styles.featureTitle}>No Special Hardware</Text>
+              <Text style={styles.featureDesc}>
+                Uses everyday laptop and phone microphones placed on the table.
+              </Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <View style={[styles.featureIcon, { backgroundColor: "rgba(14, 165, 233, 0.15)" }]}>
+                <Ionicons name="people-circle-outline" size={18} color="#0EA5E9" />
+              </View>
+              <Text style={styles.featureTitle}>Speaker Attributed</Text>
+              <Text style={styles.featureDesc}>
+                Separates simultaneous speech and attributes every sentence to who spoke it.
+              </Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <View style={[styles.featureIcon, { backgroundColor: "rgba(16, 185, 129, 0.15)" }]}>
+                <Ionicons name="flash-outline" size={18} color="#10B981" />
+              </View>
+              <Text style={styles.featureTitle}>Streaming Drafts</Text>
+              <Text style={styles.featureDesc}>
+                Instant partial captions stream in real time, followed by verified final text.
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -198,167 +238,272 @@ export default function JoinScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.bgPrimary,
   },
-  keyboardContainer: {
+  container: {
     flex: 1,
   },
   scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  brandContainer: {
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  logoBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: "#3B82F6",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  logoBadgeText: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    letterSpacing: 1,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#F8FAFC",
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#94A3B8",
-    marginTop: 6,
-    textAlign: "center",
-  },
-  card: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingBottom: 48,
+    maxWidth: 720,
     width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#1E293B",
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 5,
+    alignSelf: "center",
   },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#94A3B8",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  topNav: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 28,
   },
-  input: {
-    backgroundColor: "#0F172A",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.15)",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: "#F8FAFC",
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  codeInput: {
-    textAlign: "center",
-    fontSize: 24,
-    fontWeight: "800",
-    letterSpacing: 6,
-    fontFamily: "monospace",
-  },
-  dividerRow: {
+  brandRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 16,
-    gap: 12,
+    gap: 10,
   },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  logoBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
   },
-  dividerText: {
-    fontSize: 10,
+  brandTitle: {
+    ...typography.h3,
+    letterSpacing: -0.3,
+  },
+  demoPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99, 102, 241, 0.14)",
+    borderColor: "rgba(99, 102, 241, 0.4)",
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.full,
+    gap: 6,
+  },
+  demoPulseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.primaryLight,
+  },
+  demoPillText: {
+    fontSize: 12,
     fontWeight: "700",
-    color: "#64748B",
+    color: colors.primaryLight,
+  },
+  heroSection: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  heroTag: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: radii.full,
+    marginBottom: 12,
+  },
+  heroTagText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.textSecondary,
     letterSpacing: 1,
   },
-  primaryButton: {
-    backgroundColor: "#3B82F6",
-    borderRadius: 12,
-    paddingVertical: 14,
+  heroTitle: {
+    ...typography.h1,
+    textAlign: "center",
+    lineHeight: 40,
+    marginBottom: 12,
+  },
+  heroGradient: {
+    color: colors.primaryLight,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    textAlign: "center",
+    maxWidth: 520,
+    lineHeight: 24,
+  },
+  illustrationCard: {
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: 24,
+    position: "relative",
+    overflow: "hidden",
   },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+  circleOrbitOuter: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1,
+    borderColor: "rgba(99, 102, 241, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    marginVertical: 12,
+  },
+  circleOrbitInner: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    borderWidth: 1,
+    borderColor: "rgba(99, 102, 241, 0.35)",
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  centerTable: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(99, 102, 241, 0.15)",
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  centerTableText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.primaryLight,
+    letterSpacing: 1,
+  },
+  nodeBubble: {
+    position: "absolute",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.bgSecondary,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    gap: 5,
+  },
+  nodeLaptop: {
+    top: -10,
+    alignSelf: "center",
+  },
+  nodePhoneA: {
+    bottom: 20,
+    left: -15,
+  },
+  nodePhoneB: {
+    bottom: 20,
+    right: -15,
+  },
+  nodeText: {
+    fontSize: 10,
     fontWeight: "700",
+    color: colors.textSecondary,
   },
-  orRow: {
+  liveCaptionSnippet: {
+    flexDirection: "row",
     alignItems: "center",
-    marginVertical: 14,
+    backgroundColor: "rgba(10, 15, 29, 0.9)",
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: radii.full,
+    marginTop: 8,
+    maxWidth: "95%",
   },
-  orText: {
+  snippetDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.success,
+    marginRight: 6,
+  },
+  snippetSpeaker: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#F97316",
+  },
+  snippetText: {
     fontSize: 12,
-    color: "#64748B",
+    color: colors.textSecondary,
+    flex: 1,
   },
-  secondaryButton: {
-    backgroundColor: "#334155",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
+  actionCard: {
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    marginBottom: 28,
   },
-  secondaryButtonText: {
-    color: "#F8FAFC",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  buttonDisabled: {
-    opacity: 0.5,
+  buttonStack: {
+    gap: 12,
+    marginTop: 14,
+    marginBottom: 10,
   },
   toggleConfig: {
-    marginTop: 20,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
   },
   toggleConfigText: {
     fontSize: 12,
-    color: "#64748B",
+    color: colors.textMuted,
+    fontWeight: "600",
   },
-  configContainer: {
-    marginTop: 12,
-    paddingTop: 12,
+  configArea: {
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: colors.borderSubtle,
   },
-  configInput: {
-    fontSize: 13,
-    paddingVertical: 8,
-    fontFamily: "monospace",
+  featuresRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  featureItem: {
+    flex: 1,
+    minWidth: 180,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+  },
+  featureIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  featureTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  featureDesc: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 18,
   },
 });

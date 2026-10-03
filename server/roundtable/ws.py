@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect
 
 from roundtable.protocol import (
+    CaptionMessage,
     JoinedMessage,
     PongMessage,
     unpack_audio_frame,
@@ -26,9 +27,8 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
 
     session: Optional[Session] = session_manager.get_session(session_id)
     if not session:
-        logger.warning(f"WebSocket rejected: session '{session_id}' not found")
-        await websocket.close(code=4004, reason="Session not found")
-        return
+        logger.info(f"WebSocket session '{session_id}' not found, auto-creating session")
+        session = await session_manager.create_or_get_session(session_id)
 
     device: Optional[DeviceSession] = None
 
@@ -114,6 +114,16 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
                     # Reserved stub for speaker enrollment
                     logger.info(f"Enroll message received from device {device.device_idx if device else 'unregistered'}")
                     # No-op stub response or ack if needed
+
+                elif msg_type == "caption":
+                    try:
+                        caption_data = dict(data)
+                        if "type" in caption_data:
+                            del caption_data["type"]
+                        caption_obj = CaptionMessage(type="caption", **caption_data)
+                        await session.broadcast_json(caption_obj.model_dump())
+                    except Exception as e:
+                        logger.warning(f"Failed to broadcast caption from client: {e}")
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session {session.code}")

@@ -19,6 +19,8 @@ dev-app:
 dev-web:
     npm --workspace=app run web
 
+alias web-dev := dev-web
+
 # Start Expo dev server with cloud tunnel for remote mobile testing
 tunnel:
     npx expo start app --tunnel
@@ -26,7 +28,7 @@ tunnel:
 # Run full test suite (TypeScript protocol tests + Python backend tests)
 test:
     npm --workspace=@roundtable/protocol test
-    cd server; python -m uv run pytest
+    cd server; python -m uv run --extra dev pytest
 
 # Run integration test with simulated clients
 fake-clients devices="3":
