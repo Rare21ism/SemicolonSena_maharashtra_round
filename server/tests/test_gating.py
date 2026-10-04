@@ -299,3 +299,189 @@ async def test_multichannel_crosstalk_and_gain_mismatch(base_speech):
                         duplicates += 1
 
     assert duplicates == 0, f"Crosstalk produced {duplicates} duplicate captions on neighbouring lanes!"
+
+
+@pytest.mark.asyncio
+async def test_mid_sentence_pause_single_line_id(base_speech):
+    """
+    Test 5(a): Synthetic clip with a 300-400 ms mid-sentence pause must stay a single line_id.
+    Verifies that the gate does not close and lane does not endpoint during intra-sentence dips.
+    """
+    sr = 16000
+    part1_len = int(1.2 * sr)
+    pause_len = int(0.35 * sr)  # 350 ms pause
+    part2_len = int(1.2 * sr)
+    tail_len = int(1.2 * sr)    # trailing silence to allow clean endpoint at the end
+
+    part1 = base_speech[:part1_len].astype(np.float32)
+    pause = np.random.normal(0, 20, pause_len).astype(np.float32)
+    part2 = base_speech[part1_len : part1_len + part2_len].astype(np.float32)
+    tail = np.random.normal(0, 20, tail_len).astype(np.float32)
+
+    dev1_audio = np.concatenate([part1, pause, part2, tail])
+    dev2_audio = np.random.normal(0, 20, len(dev1_audio)).astype(np.float32)
+
+    pcm_dev1 = np.clip(dev1_audio, -32767, 32767).astype(np.int16)
+    pcm_dev2 = np.clip(dev2_audio, -32767, 32767).astype(np.int16)
+
+    pipeline = RealPipeline(enable_whisper=False, enable_gating=True)
+    emitted: list[CaptionEvent] = []
+
+    async def listener():
+        async for cap in pipeline.captions():
+            emitted.append(cap)
+
+    listener_task = asyncio.create_task(listener())
+
+    chunk_size = 1600
+    total_samples = len(pcm_dev1)
+    for i in range(0, total_samples, chunk_size):
+        t_ms = (i / float(sr)) * 1000.0
+        c1 = pcm_dev1[i : i + chunk_size]
+        c2 = pcm_dev2[i : i + chunk_size]
+        await pipeline.on_frame("test-pause", 1, i // chunk_size, t_ms, c1)
+        await pipeline.on_frame("test-pause", 2, i // chunk_size, t_ms, c2)
+
+    await pipeline.flush()
+    await asyncio.sleep(0.1)
+    listener_task.cancel()
+    await pipeline.close()
+
+    finals = [c for c in emitted if c.state == "final"]
+    assert len(finals) == 1, f"Expected exactly 1 final caption across 350ms pause, got {len(finals)}: {[f.text for f in finals]}"
+    assert finals[0].speaker_id == 1, f"Expected speaker_id 1, got {finals[0].speaker_id}"
+    unique_lines = {f.line_id for f in finals}
+    assert len(unique_lines) == 1, f"Utterance was split across multiple line_ids: {unique_lines}"
+
+
+@pytest.mark.asyncio
+async def test_two_speakers_alternating_1s_gaps(base_speech):
+    """
+    Test 5(b): Two speakers alternating with 1 s gaps must produce separate lines with the correct speaker_id.
+    """
+    sr = 16000
+    turn_len = int(1.5 * sr)
+    gap_len = int(1.0 * sr)  # 1.0 s gap
+
+    speech1 = base_speech[:turn_len].astype(np.float32)
+    speech2 = base_speech[turn_len : turn_len * 2].astype(np.float32)
+
+    total_samples = int(0.5 * sr) + turn_len + gap_len + turn_len + gap_len
+    dev1_audio = np.random.normal(0, 25, total_samples).astype(np.float32)
+    dev2_audio = np.random.normal(0, 25, total_samples).astype(np.float32)
+
+    # Speaker 1 on Dev 1: t = 0.5s .. 2.0s
+    s1_start = int(0.5 * sr)
+    dev1_audio[s1_start : s1_start + turn_len] += speech1
+    # Crosstalk on Dev 2
+    dev2_audio[s1_start + 160 : s1_start + 160 + turn_len] += speech1 * 0.25
+
+    # Speaker 2 on Dev 2: t = 3.0s .. 4.5s (after 1.0s gap)
+    s2_start = s1_start + turn_len + gap_len
+    dev2_audio[s2_start : s2_start + turn_len] += speech2
+    # Crosstalk on Dev 1
+    dev1_audio[s2_start + 160 : s2_start + 160 + turn_len] += speech2 * 0.25
+
+    pcm_dev1 = np.clip(dev1_audio, -32767, 32767).astype(np.int16)
+    pcm_dev2 = np.clip(dev2_audio, -32767, 32767).astype(np.int16)
+
+    pipeline = RealPipeline(enable_whisper=False, enable_gating=True)
+    emitted: list[CaptionEvent] = []
+
+    async def listener():
+        async for cap in pipeline.captions():
+            emitted.append(cap)
+
+    listener_task = asyncio.create_task(listener())
+
+    chunk_size = 1600
+    for i in range(0, total_samples, chunk_size):
+        t_ms = (i / float(sr)) * 1000.0
+        c1 = pcm_dev1[i : i + chunk_size]
+        c2 = pcm_dev2[i : i + chunk_size]
+        await pipeline.on_frame("test-alternating", 1, i // chunk_size, t_ms, c1)
+        await pipeline.on_frame("test-alternating", 2, i // chunk_size, t_ms, c2)
+
+    await pipeline.flush()
+    await asyncio.sleep(0.1)
+    listener_task.cancel()
+    await pipeline.close()
+
+    finals = [c for c in emitted if c.state == "final"]
+    assert len(finals) == 2, f"Expected exactly 2 final captions (one per speaker), got {len(finals)}: {[f.text for f in finals]}"
+    assert finals[0].speaker_id == 1, f"First turn should be speaker 1, got {finals[0].speaker_id}"
+    assert finals[1].speaker_id == 2, f"Second turn should be speaker 2, got {finals[1].speaker_id}"
+    assert finals[0].line_id != finals[1].line_id, "Turns should have distinct line_ids"
+
+
+@pytest.mark.asyncio
+async def test_gain_mismatch_10db_attribution(base_speech):
+    """
+    Test 5(c): Gain-mismatch case (one device 10 dB hotter) still attributes correctly.
+    """
+    sr = 16000
+    turn_len = int(1.5 * sr)
+    gap_len = int(1.0 * sr)
+
+    speech1 = base_speech[:turn_len].astype(np.float32)
+    speech2 = base_speech[turn_len : turn_len * 2].astype(np.float32)
+
+    total_samples = int(0.5 * sr) + turn_len + gap_len + turn_len + gap_len
+    dev1_audio = np.random.normal(0, 25, total_samples).astype(np.float32)
+    dev2_audio = np.random.normal(0, 25, total_samples).astype(np.float32)
+
+    # Speaker 1 on Dev 1 (gain 1.0)
+    s1_start = int(0.5 * sr)
+    dev1_audio[s1_start : s1_start + turn_len] += speech1
+    # Crosstalk on Dev 2 (0.25x)
+    dev2_audio[s1_start + 160 : s1_start + 160 + turn_len] += speech1 * 0.25
+
+    # Speaker 2 on Dev 2: t = 3.0s .. 4.5s
+    s2_start = s1_start + turn_len + gap_len
+    dev2_audio[s2_start : s2_start + turn_len] += speech2
+    # Crosstalk on Dev 1 (0.20x)
+    dev1_audio[s2_start + 160 : s2_start + 160 + turn_len] += speech2 * 0.20
+
+    # Device 2 is 10 dB hotter (+10 dB = 3.162x gain)!
+    gain_10db = 10.0 ** (10.0 / 20.0)
+    dev2_audio *= gain_10db
+
+    pcm_dev1 = np.clip(dev1_audio, -32767, 32767).astype(np.int16)
+    pcm_dev2 = np.clip(dev2_audio, -32767, 32767).astype(np.int16)
+
+    pipeline = RealPipeline(enable_whisper=False, enable_gating=True)
+    emitted: list[CaptionEvent] = []
+
+    async def listener():
+        async for cap in pipeline.captions():
+            emitted.append(cap)
+
+    listener_task = asyncio.create_task(listener())
+
+    chunk_size = 1600
+    for i in range(0, total_samples, chunk_size):
+        t_ms = (i / float(sr)) * 1000.0
+        c1 = pcm_dev1[i : i + chunk_size]
+        c2 = pcm_dev2[i : i + chunk_size]
+        await pipeline.on_frame("test-gain-mismatch", 1, i // chunk_size, t_ms, c1)
+        await pipeline.on_frame("test-gain-mismatch", 2, i // chunk_size, t_ms, c2)
+
+    await pipeline.flush()
+    await asyncio.sleep(0.1)
+    listener_task.cancel()
+    await pipeline.close()
+
+    finals = [c for c in emitted if c.state == "final"]
+    assert len(finals) >= 2, f"Expected at least 2 finals, got {len(finals)}"
+
+    # Split by midpoint of the silence gap between turn 1 and turn 2
+    gap_midpoint_ms = ((s1_start + turn_len + (gap_len / 2.0)) / float(sr)) * 1000.0
+    dev1_finals = [f for f in finals if f.t_start < gap_midpoint_ms]
+    dev2_finals = [f for f in finals if f.t_start >= gap_midpoint_ms]
+
+    assert len(dev1_finals) >= 1, f"Expected final caption for Speaker 1, got {[f.speaker_id for f in finals]}"
+    assert all(f.speaker_id == 1 for f in dev1_finals), f"Speaker 1 misattributed to {[f.speaker_id for f in dev1_finals]}"
+
+    assert len(dev2_finals) >= 1, f"Expected final caption for Speaker 2, got {[f.speaker_id for f in finals]}"
+    assert all(f.speaker_id == 2 for f in dev2_finals), f"Speaker 2 misattributed to {[f.speaker_id for f in dev2_finals]}"
+

@@ -10,6 +10,7 @@ import { CaptionMessage, DeviceInfo } from "@roundtable/protocol";
 import { ExtendedCaptionMessage } from "../components/CaptionLine";
 import { ConnectionStatus, RoundtableClient } from "../net/ws";
 import { createAudioSource } from "../audio";
+import { updateCaptions } from "./captions";
 
 interface SessionContextType {
   sessionCode: string;
@@ -112,21 +113,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Update caption or append
   const handleIncomingCaption = useCallback((caption: ExtendedCaptionMessage) => {
-    setCaptions((prev) => {
-      const index = prev.findIndex((c) => c.line_id === caption.line_id);
-      if (index !== -1) {
-        const current = prev[index];
-        // WebSocket delivery can race with a reconnect or another caption source.
-        // Keep the newest revision and never let a stale draft replace a final line.
-        if (current.state === "final" || caption.rev <= current.rev) {
-          return prev;
-        }
-        const next = [...prev];
-        next[index] = { ...current, ...caption };
-        return next;
-      }
-      return [...prev, caption];
-    });
+    setCaptions((prev) => updateCaptions(prev, caption));
 
     if (caption.speaker_id !== null) {
       setActiveSpeakerId(caption.speaker_id);

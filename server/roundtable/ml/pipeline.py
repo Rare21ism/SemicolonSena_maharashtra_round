@@ -8,7 +8,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from pathlib import Path
+import time
 from typing import AsyncIterator, Optional
+import wave
 import numpy as np
 
 from roundtable.ml.align import SessionAligner
@@ -39,6 +42,9 @@ class RealPipeline:
         whisper_prompt: Optional[str] = None,
         gate_config: Optional[GateConfig] = None,
         stats: Optional[PipelineLatencyStats] = None,
+        draft_mode: Optional[str] = None,
+        streaming_asr: Optional[StreamingASR] = None,
+        final_asr: Optional[FinalASR] = None,
     ):
         self._queue: asyncio.Queue[CaptionEvent] = asyncio.Queue()
         self._closed = False
@@ -52,21 +58,50 @@ class RealPipeline:
         else:
             self.enable_gating = os.getenv("ROUNDTABLE_GATING", "off").lower() in ("on", "true", "1")
 
+        self.draft_mode = draft_mode or os.getenv("DRAFT_MODE", "sherpa").lower()
         self.gate_config = gate_config if gate_config is not None else GateConfig()
         self.stats = stats if stats is not None else PipelineLatencyStats()
 
+        # Debug dumps: env ROUNDTABLE_DUMP_DIR
+        dump_env = os.getenv("ROUNDTABLE_DUMP_DIR")
+        self.dump_dir: Optional[Path] = Path(dump_env) if dump_env else None
+        self._raw_pcm_dumps: dict[int, list[np.ndarray]] = {}
+        self._post_gate_pcm_dumps: dict[int, list[np.ndarray]] = {}
+        self._device_stats: dict[int, dict] = {}
+        self._csv_file = None
+        if self.dump_dir:
+            self.dump_dir.mkdir(parents=True, exist_ok=True)
+            self._csv_file = open(self.dump_dir / "gate_ticks.csv", "w", encoding="utf-8")
+            self._csv_file.write("t_ms,device_idx,dbfs,noise_floor,snr,gate_open\n")
+            self._csv_file.flush()
+
         logger.info(
-            f"Initializing RealPipeline (enable_whisper={enable_whisper}, enable_gating={self.enable_gating})..."
+            f"Initializing RealPipeline (enable_whisper={enable_whisper}, enable_gating={self.enable_gating}, draft_mode={self.draft_mode})..."
         )
-        self.streaming_asr = StreamingASR()
+        self.streaming_asr = streaming_asr or StreamingASR()
         self.final_asr = (
-            FinalASR(
-                model_name=whisper_model,
-                compute_type=whisper_compute,
-                initial_prompt=whisper_prompt,
+            final_asr
+            if final_asr is not None
+            else (
+                FinalASR(
+                    model_name=whisper_model,
+                    compute_type=whisper_compute,
+                    initial_prompt=whisper_prompt,
+                )
+                if enable_whisper
+                else None
             )
-            if enable_whisper
-            else None
+        )
+
+        effective_whisper_model = (
+            self.final_asr.model_name
+            if self.final_asr
+            else (whisper_model or os.getenv("WHISPER_MODEL", "base.en"))
+        )
+        logger.info(
+            f"[Pipeline Config at Startup] WHISPER_MODEL={effective_whisper_model} | "
+            f"DRAFT_MODE={self.draft_mode} | "
+            f"enable_whisper={self.enable_whisper}"
         )
 
         if self.final_asr and self.enable_whisper:
@@ -89,13 +124,14 @@ class RealPipeline:
 
     def _get_or_create_lane(self, device_idx: int) -> Lane:
         if device_idx not in self.lanes:
-            logger.info(f"[RealPipeline] Creating new Lane for device {device_idx}")
+            logger.info(f"[RealPipeline] Creating new Lane for device {device_idx} (draft_mode={self.draft_mode})")
             self.lanes[device_idx] = Lane(
                 device_idx=device_idx,
                 emit=self._emit_caption,
                 streaming_asr=self.streaming_asr,
                 whisper_queue=self.whisper_queue,
                 enable_whisper=self.enable_whisper,
+                draft_mode=self.draft_mode,
             )
             self.aligner.enroll_device(device_idx)
         return self.lanes[device_idx]
@@ -119,9 +155,30 @@ class RealPipeline:
         async with self._lock:
             self._get_or_create_lane(device_idx)
 
+            if self.dump_dir:
+                if device_idx not in self._raw_pcm_dumps:
+                    self._raw_pcm_dumps[device_idx] = []
+                    self._device_stats[device_idx] = {
+                        "frames_received": 0,
+                        "total_samples": 0,
+                        "first_wall_s": time.perf_counter(),
+                        "last_wall_s": time.perf_counter(),
+                        "max_abs_sample": 0,
+                    }
+                self._raw_pcm_dumps[device_idx].append(pcm.copy())
+                st = self._device_stats[device_idx]
+                st["frames_received"] += 1
+                st["total_samples"] += len(pcm)
+                st["last_wall_s"] = time.perf_counter()
+                max_abs = int(np.max(np.abs(pcm))) if len(pcm) > 0 else 0
+                if max_abs > st["max_abs_sample"]:
+                    st["max_abs_sample"] = max_abs
+
             if not self.enable_gating:
                 # Direct feeding without gating (gating=off)
                 lane = self.lanes[device_idx]
+                if self.dump_dir:
+                    self._post_gate_pcm_dumps.setdefault(device_idx, []).append(pcm.copy())
                 await lane.feed(pcm, capture_ts_ms)
                 return
 
@@ -131,20 +188,60 @@ class RealPipeline:
                 await self._process_gated_tick(tick)
 
     async def _process_gated_tick(self, tick) -> None:
-        """Evaluates gate decision and feeds audio (real or zeros) to all lanes."""
+        """Evaluates gate decision, pre-roll, utterance lock, and feeds audio to all lanes."""
         # Ensure all tick devices have active Lanes
         for dev in tick.device_pcms:
             self._get_or_create_lane(dev)
+
+        active_devices = {
+            dev for dev, lane in self.lanes.items()
+            if lane.has_active_utterance
+        }
 
         gated_result = self.gate.process_tick(
             tick_idx=tick.tick_idx,
             t_start_ms=tick.t_start_ms,
             t_end_ms=tick.t_end_ms,
             device_pcms=tick.device_pcms,
+            active_devices=active_devices,
         )
+
+        if self.dump_dir and self._csv_file and not self._csv_file.closed:
+            for d, m in gated_result.device_metrics.items():
+                is_open = int(gated_result.device_open.get(d, False))
+                self._csv_file.write(
+                    f"{tick.t_start_ms:.1f},{d},{m.level_dbfs:.2f},{m.noise_floor_dbfs:.2f},{m.snr_db:.2f},{is_open}\n"
+                )
+            self._csv_file.flush()
+
+        # Handle any forced finals from 500ms takeover on locked utterances
+        for dev in gated_result.forced_final_devices:
+            if dev in self.lanes:
+                await self.lanes[dev].force_final()
 
         for dev, pcm_out in gated_result.device_pcms.items():
             lane = self.lanes[dev]
+
+            # 1. Pre-roll: when a gate opens, feed the lane the buffered 300 ms first
+            # so word onsets are not clipped
+            if gated_result.device_just_opened.get(dev, False):
+                if not lane.has_active_utterance:
+                    lane._reset_utterance()
+                pre_roll = tick.device_pre_rolls.get(dev)
+                if pre_roll is not None and len(pre_roll) > 0:
+                    if self.dump_dir:
+                        self._post_gate_pcm_dumps.setdefault(dev, []).append(pre_roll.copy())
+                    pre_roll_dur_ms = len(pre_roll) / self.aligner.samples_per_ms
+                    await lane.feed(
+                        pcm=pre_roll,
+                        t_start_ms=tick.t_start_ms - pre_roll_dur_ms,
+                        overlap=gated_result.is_overlap,
+                    )
+
+            if self.dump_dir:
+                self._post_gate_pcm_dumps.setdefault(dev, []).append(pcm_out.copy())
+
+            # 4. Route audio chunk (real PCM if open, zeros if truly closed)
             await lane.feed(
                 pcm=pcm_out,
                 t_start_ms=tick.t_start_ms,
@@ -159,6 +256,45 @@ class RealPipeline:
                 yield event
             except asyncio.CancelledError:
                 break
+
+    def _write_dumps(self) -> None:
+        """Writes per-device WAVs and logs duration/clipping statistics."""
+        if not self.dump_dir:
+            return
+
+        if self._csv_file and not self._csv_file.closed:
+            self._csv_file.close()
+
+        for dev, chunks in self._raw_pcm_dumps.items():
+            if chunks:
+                all_pcm = np.concatenate(chunks)
+                wav_path = self.dump_dir / f"raw_device_{dev}.wav"
+                with wave.open(str(wav_path), "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(16000)
+                    wf.writeframes(all_pcm.tobytes())
+
+        for dev, chunks in self._post_gate_pcm_dumps.items():
+            if chunks:
+                all_pcm = np.concatenate(chunks)
+                wav_path = self.dump_dir / f"post_gate_device_{dev}.wav"
+                with wave.open(str(wav_path), "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(16000)
+                    wf.writeframes(all_pcm.tobytes())
+
+        for dev, st in self._device_stats.items():
+            wall_dur = st["last_wall_s"] - st["first_wall_s"]
+            audio_dur = st["total_samples"] / 16000.0
+            max_abs = st["max_abs_sample"]
+            ratio_str = f"{audio_dur / wall_dur:.2f}x" if wall_dur > 0.001 else "1.00x"
+            logger.info(
+                f"[Dump dev={dev}] frames_received={st['frames_received']}, total_samples={st['total_samples']}, "
+                f"wall_duration={wall_dur:.2f}s, audio_duration={audio_dur:.2f}s (speed={ratio_str}), "
+                f"max_abs_sample={max_abs} ({max_abs/32768.0*100:.1f}% FS)"
+            )
 
     async def flush(self) -> None:
         """Flushes remaining audio from jitter buffer, gates, and lanes."""
@@ -183,3 +319,4 @@ class RealPipeline:
             await self.whisper_queue.close()
         self.aligner.reset()
         self.gate.reset()
+        self._write_dumps()

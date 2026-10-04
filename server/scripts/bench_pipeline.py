@@ -117,6 +117,8 @@ async def run_single_model_benchmark(
     wav_pcms: list[np.ndarray],
     ref_text: Optional[str] = None,
     enable_gating: bool = True,
+    ground_truth_device: int = 1,
+    expected_utterances: int = 1,
 ) -> dict:
     gate_str = "ON" if enable_gating else "OFF"
     logger.info(f"\n{'='*70}\nBenchmarking Whisper Model: {model_name} (Gating: {gate_str})\n{'='*70}")
@@ -167,6 +169,11 @@ async def run_single_model_benchmark(
     unique_finals = list(latest_final_by_line.values())
     duplicates_count = count_crosstalk_duplicates(unique_finals)
 
+    # Attribution accuracy: caption speaker_id vs ground-truth device
+    total_lines = len(unique_finals)
+    correct_attribution = sum(1 for c in unique_finals if c.speaker_id == ground_truth_device)
+    attribution_acc = (correct_attribution / total_lines * 100.0) if total_lines > 0 else 0.0
+
     # Compute WER if reference text is provided
     # Reconstruct complete transcript for Device 1 (or first active device)
     first_dev = 1 if 1 in lines_by_device else (next(iter(lines_by_device)) if lines_by_device else None)
@@ -191,6 +198,9 @@ async def run_single_model_benchmark(
         "sherpa_mean_ms": sherpa_latencies["mean"],
         "wer": wer_score,
         "duplicates": duplicates_count,
+        "attr_acc": attribution_acc,
+        "lines_produced": total_lines,
+        "expected_lines": expected_utterances,
         "evaluated": stats.whisper_total_evaluated,
         "changed": stats.whisper_changed_count,
         "skips_backlog": stats.whisper_skips_backlog,
@@ -218,11 +228,15 @@ async def async_main():
     parser.add_argument("--ref", type=Path, default=None, help="Optional reference transcript file for WER scoring")
     args = parser.parse_args()
 
-    # Load reference text if provided
+    # Load reference text if provided or use default test_sample_ref.txt
+    default_ref_path = Path(__file__).resolve().parent / "test_sample_ref.txt"
     ref_text = None
     if args.ref and args.ref.is_file():
         ref_text = args.ref.read_text(encoding="utf-8").strip()
         logger.info(f"Loaded reference transcript from {args.ref.name} ({len(ref_text.split())} words)")
+    elif default_ref_path.is_file():
+        ref_text = default_ref_path.read_text(encoding="utf-8").strip()
+        logger.info(f"Loaded default reference transcript from {default_ref_path.name} ({len(ref_text.split())} words)")
 
     # Resolve WAV paths
     wav_paths: list[Path] = []
@@ -284,19 +298,23 @@ async def async_main():
                 wav_pcms,
                 ref_text=ref_text,
                 enable_gating=gate_mode,
+                ground_truth_device=1,
+                expected_utterances=1,
             )
             results.append(res)
 
     # Print comparative results table
-    print("\n" + "=" * 105)
-    print("ROUNDTABLE PIPELINE BENCHMARK (GATING & LATENCY COMPARISON)")
-    print("=" * 105)
+    print("\n" + "=" * 125)
+    print("ROUNDTABLE PIPELINE BENCHMARK (GATING & ATTRIBUTION COMPARISON)")
+    print("=" * 125)
     print(
-        f"{'Whisper Model':<16} | {'Gating':<6} | {'Mean (ms)':<9} | {'P95 (ms)':<9} | {'Max (ms)':<9} | {'WER (%)':<8} | {'Duplicates':<10} | {'Drops':<5}"
+        f"{'Whisper Model':<16} | {'Gating':<6} | {'Mean (ms)':<9} | {'P95 (ms)':<9} | {'Max (ms)':<9} | {'WER (%)':<8} | {'Duplicates':<10} | {'Attr Acc (%)':<12} | {'Lines (Prod/Exp)':<16}"
     )
-    print("-" * 105)
+    print("-" * 125)
     for r in results:
         wer_str = f"{r['wer']:.1f}%" if r["wer"] is not None else "N/A"
+        attr_str = f"{r['attr_acc']:.1f}%"
+        lines_str = f"{r['lines_produced']} / {r['expected_lines']}"
         print(
             f"{r['model']:<16} | "
             f"{r['gating']:<6} | "
@@ -305,9 +323,10 @@ async def async_main():
             f"{r['max_ms']:9.1f} | "
             f"{wer_str:<8} | "
             f"{r['duplicates']:<10} | "
-            f"{r['stale_drops']:<5}"
+            f"{attr_str:<12} | "
+            f"{lines_str:<16}"
         )
-    print("=" * 105)
+    print("=" * 125)
     print("\nTranscripts Sample:")
     for r in results:
         print(f"[{r['model']} | Gating {r['gating']}]: \"{r['sample_output']}\"")
