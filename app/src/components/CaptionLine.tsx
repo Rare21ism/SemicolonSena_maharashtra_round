@@ -22,48 +22,6 @@ interface CaptionLineProps {
   isCurrentSpeaker?: boolean;
 }
 
-const AnimatedTypingDots: React.FC = () => {
-  const dot1 = useRef(new Animated.Value(0.2)).current;
-  const dot2 = useRef(new Animated.Value(0.2)).current;
-  const dot3 = useRef(new Animated.Value(0.2)).current;
-
-  useEffect(() => {
-    const pulse = (val: Animated.Value, delay: number) =>
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(val, {
-          toValue: 1,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-        Animated.timing(val, {
-          toValue: 0.2,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-        Animated.delay(Math.max(0, 360 - delay)),
-      ]);
-
-    const anim = Animated.loop(
-      Animated.parallel([
-        pulse(dot1, 0),
-        pulse(dot2, 180),
-        pulse(dot3, 360),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [dot1, dot2, dot3]);
-
-  return (
-    <View style={styles.animatedDotsContainer} accessibilityLabel="Listening...">
-      <Animated.Text style={[styles.animatedDotText, { opacity: dot1 }]}>•</Animated.Text>
-      <Animated.Text style={[styles.animatedDotText, { opacity: dot2 }]}>•</Animated.Text>
-      <Animated.Text style={[styles.animatedDotText, { opacity: dot3 }]}>•</Animated.Text>
-    </View>
-  );
-};
-
 export const CaptionLine: React.FC<CaptionLineProps> = React.memo(
   ({ caption, speakerName, speakerColor, isCurrentSpeaker = false }) => {
     const isDraft = caption.state === "draft";
@@ -139,21 +97,15 @@ export const CaptionLine: React.FC<CaptionLineProps> = React.memo(
               {isDraft ? (
                 <View style={styles.draftBadge}>
                   <View style={styles.draftPulseDot} />
-                  <Text style={styles.draftBadgeText}>LIVE</Text>
+                  <Text style={styles.draftBadgeText}>Speaking</Text>
                 </View>
-              ) : (
-                caption.rev > 1 && (
-                  <Text style={styles.revTag}>rev.{caption.rev}</Text>
-                )
-              )}
+              ) : null}
               <Text style={styles.timeTag}>{formatTime(caption.t_start)}</Text>
             </View>
           </View>
 
           {/* Transcript Text (Hero readability) */}
-          {isDraft && (!caption.text || !caption.text.trim()) ? (
-            <AnimatedTypingDots />
-          ) : (
+          {isDraft && (!caption.text || !caption.text.trim()) ? null : (
             <Text
               className={isDraft ? "text-lg font-medium leading-relaxed text-textSecondary italic" : "text-lg font-bold leading-relaxed text-textPrimary"}
               style={[
@@ -271,11 +223,6 @@ const styles = StyleSheet.create({
     color: colors.warning,
     letterSpacing: 0.6,
   },
-  revTag: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontFamily: "monospace",
-  },
   timeTag: {
     fontSize: 11,
     color: colors.textMuted,
@@ -288,23 +235,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   captionBodyDraft: {
-    color: "#CBD5E1",
+    color: colors.textSecondary,
     fontStyle: "italic",
   },
   draftCaret: {
     color: colors.warning,
     fontSize: 14,
-  },
-  animatedDotsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 4,
-  },
-  animatedDotText: {
-    fontSize: 20,
-    lineHeight: 22,
-    color: colors.warning,
-    fontWeight: "bold",
   },
 });

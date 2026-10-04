@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
-import { colors, getSpeakerColor, radii, spacing, typography } from "../theme";
+import React from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { colors, getSpeakerColor, radii } from "../theme";
 import { ExtendedCaptionMessage } from "./CaptionLine";
 
 interface CaptionGroupProps {
@@ -11,129 +11,52 @@ interface CaptionGroupProps {
   isCurrentSpeaker?: boolean;
 }
 
-const AnimatedTypingDots: React.FC = () => {
-  const dot1 = useRef(new Animated.Value(0.2)).current;
-  const dot2 = useRef(new Animated.Value(0.2)).current;
-  const dot3 = useRef(new Animated.Value(0.2)).current;
-
-  useEffect(() => {
-    const pulse = (val: Animated.Value, delay: number) =>
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(val, {
-          toValue: 1,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-        Animated.timing(val, {
-          toValue: 0.2,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-        Animated.delay(Math.max(0, 360 - delay)),
-      ]);
-
-    const anim = Animated.loop(
-      Animated.parallel([
-        pulse(dot1, 0),
-        pulse(dot2, 180),
-        pulse(dot3, 360),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [dot1, dot2, dot3]);
-
-  return (
-    <View style={styles.animatedDotsContainer} accessibilityLabel="Listening...">
-      <Animated.Text style={[styles.animatedDotText, { opacity: dot1 }]}>•</Animated.Text>
-      <Animated.Text style={[styles.animatedDotText, { opacity: dot2 }]}>•</Animated.Text>
-      <Animated.Text style={[styles.animatedDotText, { opacity: dot3 }]}>•</Animated.Text>
-    </View>
-  );
-};
-
 export const CaptionGroup: React.FC<CaptionGroupProps> = React.memo(
-  ({
-    speakerId,
-    speakerName,
-    speakerColor,
-    captions,
-    isCurrentSpeaker = false,
-  }) => {
+  ({ speakerId, speakerName, speakerColor, captions, isCurrentSpeaker = false }) => {
     const fallback = getSpeakerColor(speakerId);
     const resolvedColor = speakerColor || fallback.color;
-    const resolvedName =
-      speakerName ||
-      (speakerId !== null ? `Speaker ${speakerId + 1}` : "Speaker");
-
-    const formatTime = (ms: number) => {
-      if (!ms) return "";
-      const totalSec = Math.floor(ms / 1000);
-      const minutes = Math.floor(totalSec / 60);
-      const seconds = totalSec % 60;
-      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-    };
-
-    const hasDraft = captions.some((c) => c.state === "draft");
-    const hasOverlap = captions.some((c) => c.isOverlapping);
+    const resolvedName = speakerName || (speakerId !== null ? `Speaker ${speakerId + 1}` : "Speaker");
+    const hasOverlap = captions.some((caption) => caption.isOverlapping);
+    const timestamp = captions[captions.length - 1]?.t_start ?? 0;
+    const timeLabel = `${Math.floor(timestamp / 60000)}:${String(Math.floor(timestamp / 1000) % 60).padStart(2, "0")}`;
 
     return (
       <View
         style={[
-          styles.groupContainer,
-          isCurrentSpeaker && styles.activeSpeakerGroup,
+          styles.group,
+          isCurrentSpeaker && styles.groupActive,
           hasOverlap && styles.groupOverlap,
         ]}
+        accessibilityRole="summary"
+        accessibilityLabel={`${resolvedName}, ${captions.map((caption) => caption.text).filter(Boolean).join(" ")}`}
       >
-        {/* Speaker Editorial Header */}
-        <View style={styles.speakerHeader}>
-          <View style={styles.nameRow}>
-            <View style={[styles.speakerDot, { backgroundColor: resolvedColor }]} />
-            <Text style={[styles.speakerName, { color: resolvedColor }]}>
-              {resolvedName.toUpperCase()}
-            </Text>
+        <View style={styles.header}>
+          <View style={[styles.speakerMark, { backgroundColor: resolvedColor }]} />
+          <Text style={[styles.speakerName, { color: resolvedColor }]}>{resolvedName}</Text>
+          {isCurrentSpeaker && (
+            <View style={styles.speakingBadge}>
+              <View style={[styles.speakingDot, { backgroundColor: resolvedColor }]} />
+              <Text style={styles.speakingText}>Speaking</Text>
+            </View>
+          )}
+          {hasOverlap && <Text style={styles.overlapText}>Overlapping voices</Text>}
+          <Text style={styles.timestamp}>{timeLabel}</Text>
+        </View>
 
-            {isCurrentSpeaker && (
-              <View style={styles.speakingBadge}>
-                <View style={[styles.speakingPulseDot, { backgroundColor: resolvedColor }]} />
-                <Text style={[styles.speakingBadgeText, { color: resolvedColor }]}>
-                  SPEAKING
-                </Text>
-              </View>
-            )}
-
-            {hasOverlap && (
-              <View style={styles.overlapTag}>
-                <Text style={styles.overlapTagText}>Simultaneous speech</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Grouped Caption Lines (Consecutive statements by this speaker) */}
-          <View className="gap-1.5" style={styles.sentencesContainer}>
-            {captions.map((caption, idx) => {
-              const isLineDraft = caption.state === "draft";
-              return (
-                <View key={caption.line_id || idx} style={styles.sentenceRow}>
-                  {isLineDraft && (!caption.text || !caption.text.trim()) ? (
-                    <AnimatedTypingDots />
-                  ) : (
-                    <Text
-                      className={isLineDraft ? "text-base font-medium text-textSecondary" : "text-base font-semibold text-textPrimary"}
-                      style={[
-                        styles.captionText,
-                        isLineDraft ? styles.captionDraftText : styles.captionFinalText,
-                      ]}
-                    >
-                      {caption.text}
-                      {isLineDraft && <Text style={styles.draftCaret}> ▎</Text>}
-                    </Text>
-                  )}
-                </View>
-              );
-            })}
-          </View>
+        <View style={styles.lines}>
+          {captions.map((caption, index) => {
+            if (caption.state === "draft" && !caption.text.trim()) return null;
+            const isDraft = caption.state === "draft";
+            return (
+              <Text
+                key={caption.line_id || index}
+                accessibilityLabel={isDraft ? `Current speech: ${caption.text}` : caption.text}
+                style={[styles.captionText, isDraft && styles.captionDraft]}
+              >
+                {caption.text}{isDraft ? " ▎" : ""}
+              </Text>
+            );
+          })}
         </View>
       </View>
     );
@@ -141,45 +64,31 @@ export const CaptionGroup: React.FC<CaptionGroupProps> = React.memo(
 );
 
 const styles = StyleSheet.create({
-  groupContainer: {
-    paddingVertical: 18,
-    paddingHorizontal: 0,
-    marginVertical: 12,
-    borderLeftWidth: 2,
+  group: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 5,
+    borderLeftWidth: 3,
     borderLeftColor: "transparent",
-    paddingLeft: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    borderRadius: radii.sm,
   },
-  activeSpeakerGroup: {
+  groupActive: {
     borderLeftColor: colors.primary,
+    backgroundColor: colors.bgCard,
   },
-  groupOverlap: {
-    borderLeftColor: colors.danger,
-  },
-  speakerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  speakerDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  speakerName: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-  },
+  groupOverlap: { borderLeftColor: colors.danger },
+  header: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" },
+  speakerMark: { width: 7, height: 7, borderRadius: 4 },
+  speakerName: { fontSize: 11, fontWeight: "800", letterSpacing: 1.1 },
   speakingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radii.full,
     backgroundColor: colors.bgSecondary,
     borderWidth: 1,
     borderColor: colors.borderDefault,
@@ -254,4 +163,11 @@ const styles = StyleSheet.create({
     color: colors.warning,
     fontWeight: "bold",
   },
+  speakingDot: { width: 5, height: 5, borderRadius: 3 },
+  speakingText: { color: colors.textSecondary, fontSize: 10, fontWeight: "700" },
+  overlapText: { color: colors.danger, fontSize: 10, fontWeight: "700" },
+  timestamp: { color: colors.textMuted, fontSize: 10, fontFamily: "monospace", marginLeft: "auto" },
+  lines: { gap: 3 },
+  captionText: { color: colors.textPrimary, fontSize: 22, lineHeight: 31, fontWeight: "500", letterSpacing: -0.2 },
+  captionDraft: { color: colors.textSecondary, fontWeight: "400" },
 });

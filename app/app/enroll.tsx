@@ -37,20 +37,12 @@ export default function VoiceEnrollmentScreen() {
   const playbackRef = useRef<HTMLAudioElement | null>(null);
   const playbackUrlRef = useRef<string | null>(null);
 
-  const nativeRecorderRef = useRef<any>(null);
-  const nativePlayerRef = useRef<any>(null);
-  const recordedUriRef = useRef<string | null>(null);
-
   useEffect(() => () => {
     recordingRef.current = false;
     sourceRef.current?.stop();
     clientRef.current?.disconnect();
     playbackRef.current?.pause();
     if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current);
-    try {
-      nativeRecorderRef.current?.stop?.();
-      nativePlayerRef.current?.release?.();
-    } catch {}
   }, []);
 
   const startRecording = async () => {
@@ -203,23 +195,7 @@ export default function VoiceEnrollmentScreen() {
 
   const handlePlaySample = async () => {
     if (Platform.OS !== "web") {
-      const uri = recordedUriRef.current;
-      if (!uri) return;
-      try {
-        const { createAudioPlayer } = await import("expo-audio");
-        setIsPlaying(true);
-        const player = createAudioPlayer(uri);
-        nativePlayerRef.current = player;
-        (player as any).addListener?.("playbackStatusUpdate", (status: any) => {
-          if (status?.didJustFinish || !status?.playing) {
-            setIsPlaying(false);
-          }
-        });
-        player.play();
-      } catch (error) {
-        setIsPlaying(false);
-        setCaptureError(error instanceof Error ? error.message : "Could not play recorded sample.");
-      }
+      setCaptureError("Sample playback is available in the web app only.");
       return;
     }
     const frames = capturedAudioRef.current;

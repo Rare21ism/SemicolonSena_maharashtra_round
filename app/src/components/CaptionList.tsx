@@ -35,13 +35,20 @@ export const CaptionList: React.FC<CaptionListProps> = ({
   micLevel = 0,
 }) => {
   const flatListRef = useRef<FlatList>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   const speakerMap = new Map<number, DeviceInfo>();
   roster.forEach((dev) => speakerMap.set(dev.device_idx, dev));
 
+  // Empty draft revisions carry no caption text. Keep the stream focused on readable words;
+  // the listening status lives in the room controls instead of spawning one loader per speaker.
+  const visibleCaptions = captions.filter(
+    (caption) => caption.state !== "draft" || Boolean(caption.text.trim())
+  );
+
   // Intelligently group consecutive caption lines by the same speaker
   const clusters: CaptionCluster[] = [];
-  captions.forEach((cap, index) => {
+  visibleCaptions.forEach((cap, index) => {
     const speakerInfo =
       cap.speaker_id !== null ? speakerMap.get(cap.speaker_id) : undefined;
     const resolvedName = cap.speakerName || speakerInfo?.name;
@@ -77,7 +84,7 @@ export const CaptionList: React.FC<CaptionListProps> = ({
         </View>
       )}
 
-      {captions.length === 0 ? (
+      {visibleCaptions.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={styles.waveformBox}>
             <AudioWaveform
@@ -89,9 +96,9 @@ export const CaptionList: React.FC<CaptionListProps> = ({
             />
           </View>
           <Text style={styles.emptyKicker}>THE CONVERSATION</Text>
-          <Text style={styles.emptyTitle}>Waiting for speech</Text>
+          <Text style={styles.emptyTitle}>Listening for the conversation</Text>
           <Text style={styles.emptySubtitle}>
-            Speak naturally. Spoken words will flow into this transcript as people talk around the table.
+            Speak naturally. Your group’s words will appear here as the conversation unfolds.
           </Text>
         </View>
       ) : (
@@ -112,8 +119,16 @@ export const CaptionList: React.FC<CaptionListProps> = ({
           )}
           contentContainerStyle={styles.listContent}
           onContentSizeChange={() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
+            if (shouldAutoScrollRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }
           }}
+          onScroll={(event) => {
+            const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+            shouldAutoScrollRef.current =
+              contentSize.height - layoutMeasurement.height - contentOffset.y < 96;
+          }}
+          scrollEventThrottle={80}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -150,10 +165,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   listContent: {
-    paddingHorizontal: 28,
-    paddingVertical: 24,
-    paddingBottom: 72,
-    maxWidth: 780,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 32,
+    maxWidth: 980,
     width: "100%",
     alignSelf: "center",
   },
