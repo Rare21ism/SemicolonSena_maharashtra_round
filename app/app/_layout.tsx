@@ -7,6 +7,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "../src/state/SessionContext";
 import { colors } from "../src/theme";
 
+if (typeof document !== "undefined" && document.documentElement) {
+  document.documentElement.style.setProperty("--css-interop-darkMode", "class dark");
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>

@@ -26,6 +26,8 @@ export default function AudioSetupScreen() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const nativeRecorderRef = useRef<any>(null);
+  const nativePollRef = useRef<any>(null);
   const animationRef = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -34,12 +36,60 @@ export default function AudioSetupScreen() {
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
       void audioContextRef.current.close();
     }
+    if (nativePollRef.current) clearInterval(nativePollRef.current);
+    try {
+      nativeRecorderRef.current?.stop?.();
+    } catch {}
   }, []);
 
   const requestPermission = async () => {
     setPermissionError(null);
-    if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setPermissionError("Microphone access is unavailable in this environment. Please open Roundtable in a modern web browser.");
+    if (Platform.OS !== "web") {
+      try {
+        const {
+          requestRecordingPermissionsAsync,
+          setAudioModeAsync,
+          AudioModule,
+          RecordingPresets,
+        } = await import("expo-audio");
+        const res = await requestRecordingPermissionsAsync();
+        if (res.granted) {
+          setHasPermission(true);
+          try {
+            await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+            const recorder = new (AudioModule as any).AudioRecorder({
+              ...RecordingPresets.HIGH_QUALITY,
+              isMeteringEnabled: true,
+            });
+            nativeRecorderRef.current = recorder;
+            await recorder.prepareToRecordAsync();
+            recorder.record();
+
+            nativePollRef.current = setInterval(() => {
+              try {
+                const status = recorder.getStatus();
+                if (typeof status?.metering === "number") {
+                  const normalized = Math.max(0, Math.min(1, (status.metering + 55) / 45));
+                  setLevel(normalized);
+                  setQuality(status.metering > -38 ? "good" : status.metering > -52 ? "fair" : "poor");
+                }
+              } catch {}
+            }, 80);
+          } catch (recErr) {
+            console.warn("Could not start native audio meter:", recErr);
+          }
+        } else {
+          setPermissionError("Microphone permission was denied. Please allow microphone access in Settings.");
+          setHasPermission(false);
+        }
+      } catch (error) {
+        setPermissionError(error instanceof Error ? error.message : "Microphone permission error.");
+        setHasPermission(false);
+      }
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setPermissionError("Microphone capture is unavailable in this browser.");
       return;
     }
     try {
@@ -166,6 +216,14 @@ export default function AudioSetupScreen() {
               rightIcon={<Ionicons name="arrow-forward" size={18} color="#FBF9F5" />}
               onPress={handleContinue}
               style={[styles.btnFull, { marginTop: 24 }]}
+            />
+            <Button
+              title="Join Meeting Directly"
+              variant="outline"
+              size="md"
+              icon={<Ionicons name="enter-outline" size={16} color={colors.textSecondary} />}
+              onPress={() => router.push("/waiting")}
+              style={[styles.btnFull, { marginTop: 10 }]}
             />
           </View>
         )}

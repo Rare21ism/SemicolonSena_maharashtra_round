@@ -19,7 +19,13 @@
       "output": "single"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Roundtable uses your microphone to stream audio for live captions."
+        }
+      ]
     ]
   }
 }

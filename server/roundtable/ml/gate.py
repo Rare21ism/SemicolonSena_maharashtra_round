@@ -116,7 +116,14 @@ class AudioGate:
         dominant_device: Optional[int] = None
         overlap_candidate = False
 
-        if len(active_candidates) == 1:
+        if len(device_pcms) == 1:
+            dev = next(iter(device_pcms.keys()))
+            m = metrics_by_dev[dev]
+            # Single-device session: always pass audio through to ASR unless completely zero
+            if m.level_dbfs > -70.0 or m.snr_db > 0.0:
+                dominant_device = dev
+                qualifying_devices.add(dev)
+        elif len(active_candidates) == 1:
             top_dev, top_snr = active_candidates[0]
             other_snrs = [m.snr_db for d, m in metrics_by_dev.items() if d != top_dev]
             runner_snr = max(other_snrs) if other_snrs else -100.0
