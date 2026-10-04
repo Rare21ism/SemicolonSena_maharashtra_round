@@ -56,7 +56,7 @@ class RealPipeline:
         else:
             self.enable_gating = os.getenv("ROUNDTABLE_GATING", "on").lower() not in ("off", "false", "0")
 
-        self.draft_mode = draft_mode or os.getenv("DRAFT_MODE", "sherpa").lower()
+        self.draft_mode = (draft_mode or os.getenv("DRAFT_MODE", "whisper_rolling")).lower()
         self.gate_config = gate_config if gate_config is not None else GateConfig()
         self.stats = stats if stats is not None else PipelineLatencyStats()
 
@@ -77,27 +77,38 @@ class RealPipeline:
             f"Initializing RealPipeline (enable_whisper={enable_whisper}, enable_gating={self.enable_gating}, draft_mode={self.draft_mode})..."
         )
         self.streaming_asr = streaming_asr or StreamingASR()
-        self.final_asr = (
-            final_asr
-            if final_asr is not None
-            else (
-                FinalASR(
-                    model_name=whisper_model,
+
+        rolling_model = os.getenv("ROLLING_MODEL", "base.en")
+        final_model = whisper_model or os.getenv("FINAL_MODEL", os.getenv("WHISPER_MODEL", "small.en"))
+
+        if enable_whisper:
+            self.final_asr = (
+                final_asr
+                if final_asr is not None
+                else FinalASR(
+                    model_name=final_model,
                     compute_type=whisper_compute,
                     initial_prompt=whisper_prompt,
                 )
-                if enable_whisper
-                else None
             )
-        )
+            if rolling_model == self.final_asr.model_name:
+                self.rolling_asr = self.final_asr
+            else:
+                self.rolling_asr = FinalASR(
+                    model_name=rolling_model,
+                    compute_type=whisper_compute,
+                    initial_prompt=whisper_prompt,
+                )
+        else:
+            self.final_asr = None
+            self.rolling_asr = None
 
-        effective_whisper_model = (
-            self.final_asr.model_name
-            if self.final_asr
-            else (whisper_model or os.getenv("WHISPER_MODEL", "base.en"))
-        )
+        effective_final_model = self.final_asr.model_name if self.final_asr else final_model
+        effective_rolling_model = self.rolling_asr.model_name if self.rolling_asr else rolling_model
+
         logger.info(
-            f"[Pipeline Config at Startup] WHISPER_MODEL={effective_whisper_model} | "
+            f"[Pipeline Config at Startup] ROLLING_MODEL={effective_rolling_model} | "
+            f"FINAL_MODEL={effective_final_model} | "
             f"DRAFT_MODE={self.draft_mode} | "
             f"enable_whisper={self.enable_whisper}"
         )
@@ -105,8 +116,10 @@ class RealPipeline:
         if self.final_asr and self.enable_whisper:
             self.whisper_queue = WhisperCorrectionQueue(
                 final_asr=self.final_asr,
+                rolling_asr=self.rolling_asr,
                 emit_callback=self._emit_caption,
                 stats=self.stats,
+                gate_open_threshold_db=self.gate_config.threshold_open_db,
             )
         else:
             self.whisper_queue = None
@@ -130,6 +143,7 @@ class RealPipeline:
                 whisper_queue=self.whisper_queue,
                 enable_whisper=self.enable_whisper,
                 draft_mode=self.draft_mode,
+                gate_open_threshold_db=self.gate_config.threshold_open_db,
             )
             self.aligner.enroll_device(device_idx)
         return self.lanes[device_idx]
@@ -219,6 +233,8 @@ class RealPipeline:
 
         for dev, pcm_out in gated_result.device_pcms.items():
             lane = self.lanes[dev]
+            m = gated_result.device_metrics.get(dev)
+            snr_val = m.snr_db if m else None
 
             # 1. Pre-roll: when a gate opens, feed the lane the buffered 300 ms first
             # so word onsets are not clipped
@@ -234,6 +250,7 @@ class RealPipeline:
                         pcm=pre_roll,
                         t_start_ms=tick.t_start_ms - pre_roll_dur_ms,
                         overlap=gated_result.is_overlap,
+                        snr_db=snr_val,
                     )
 
             if self.dump_dir:
@@ -244,6 +261,7 @@ class RealPipeline:
                 pcm=pcm_out,
                 t_start_ms=tick.t_start_ms,
                 overlap=gated_result.is_overlap,
+                snr_db=snr_val,
             )
 
     async def captions(self) -> AsyncIterator[CaptionEvent]:

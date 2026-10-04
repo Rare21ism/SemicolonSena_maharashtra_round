@@ -24,9 +24,23 @@ MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "models"
 DEFAULT_SHERPA_DIR = MODELS_DIR / "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17"
 DEFAULT_WHISPER_DIR = MODELS_DIR / "faster-whisper-small.en"
 DEFAULT_HOTWORDS_FILE = MODELS_DIR / "hotwords.txt"
-DEFAULT_WHISPER_PROMPT = (
-    "Roundtable, ad hoc microphone array, live captions, ASR, diarization, latency, FastAPI, Expo, WebSocket"
-)
+NAMES_FILE = MODELS_DIR / "names.txt"
+
+
+def load_whisper_prompt(names_file: Optional[Path | str] = None) -> str:
+    """Loads prompt including Laxman and teammate names from names.txt."""
+    path = Path(names_file) if names_file else NAMES_FILE
+    names = ["Laxman"]
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            name = line.strip()
+            if name and name not in names:
+                names.append(name)
+    names_str = ", ".join(names)
+    return f"{names_str}, Roundtable, ad hoc microphone array"
+
+
+DEFAULT_WHISPER_PROMPT = load_whisper_prompt()
 
 
 def _find_sherpa_files(sherpa_dir: Path) -> tuple[Path, Path, Path, Path]:
@@ -179,13 +193,13 @@ class FinalASR:
         from faster_whisper import WhisperModel
 
         # Match download_models.py's local small.en model directory by default.
-        self.model_name = model_name or os.getenv("WHISPER_MODEL", "small.en")
+        self.model_name = model_name or os.getenv("FINAL_MODEL") or os.getenv("WHISPER_MODEL", "small.en")
         self.device = device or os.getenv("WHISPER_DEVICE") or _auto_detect_device()
 
         default_compute = "float16" if self.device == "cuda" else "int8"
         self.compute_type = compute_type or os.getenv("WHISPER_COMPUTE", default_compute)
-        self.initial_prompt = initial_prompt if initial_prompt is not None else os.getenv(
-            "WHISPER_PROMPT", DEFAULT_WHISPER_PROMPT
+        self.initial_prompt = initial_prompt if initial_prompt is not None else (
+            os.getenv("WHISPER_PROMPT") or DEFAULT_WHISPER_PROMPT
         )
 
         # Resolve model path: check if local models directory exists
@@ -202,8 +216,9 @@ class FinalASR:
 
     def transcribe(self, pcm: np.ndarray, initial_prompt: Optional[str] = None) -> str:
         """
-        Transcribes a segment of 16 kHz audio using:
-        beam_size=1, condition_on_previous_text=False, language='en', vad_filter=False, initial_prompt.
+        Transcribes a segment of 16 kHz audio using faster-whisper with hallucination guard params:
+        beam_size=1, condition_on_previous_text=False, language='en', vad_filter=True (min_silence_duration_ms=300),
+        no_speech_threshold=0.6, log_prob_threshold=-1.0, compression_ratio_threshold=2.4.
         """
         if pcm.dtype == np.int16:
             float_pcm = pcm.astype(np.float32) / 32768.0
@@ -222,7 +237,11 @@ class FinalASR:
             beam_size=1,
             condition_on_previous_text=False,
             language="en",
-            vad_filter=False,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=300),
+            no_speech_threshold=0.6,
+            log_prob_threshold=-1.0,
+            compression_ratio_threshold=2.4,
             initial_prompt=prompt,
         )
 
