@@ -6,7 +6,7 @@ import {
   setAudioModeAsync,
 } from "expo-audio";
 import { File } from "expo-file-system";
-import { AudioSource } from "./AudioSource";
+import { AudioFormatInfo, AudioSource } from "./AudioSource";
 
 const SAMPLE_RATE = 16_000;
 const FRAME_SAMPLES = 1_600;
@@ -35,6 +35,34 @@ export class NativeAudioSource implements AudioSource {
   private isRunning = false;
   private activeRecorder: any = null;
   private recordInterval: any = null;
+
+  private hasLoggedAudioFormat = false;
+  private audioFormatInfo: AudioFormatInfo = {
+    sampleRate: SAMPLE_RATE,
+    channels: 1,
+    bitDepth: 16,
+    byteOrder: "little-endian (LE)",
+    format: "pcm_s16le",
+  };
+
+  private logModuleAudioFormat(sampleRate: number, channels: number, bitDepth: number, byteOrder: string) {
+    if (this.hasLoggedAudioFormat) return;
+    this.hasLoggedAudioFormat = true;
+    this.audioFormatInfo = {
+      sampleRate,
+      channels,
+      bitDepth,
+      byteOrder,
+      format: `pcm_s${bitDepth}le`,
+    };
+    console.log(
+      `[AudioSource.native] Module audio format: sampleRate=${sampleRate}, channels=${channels}, bitDepth=${bitDepth}, byteOrder=${byteOrder}`
+    );
+  }
+
+  getAudioFormat(): AudioFormatInfo {
+    return this.audioFormatInfo;
+  }
 
   async start(): Promise<void> {
     if (this.isRunning) return;
@@ -155,6 +183,15 @@ export class NativeAudioSource implements AudioSource {
     if (!buffer || buffer.byteLength <= 44) return;
     const view = new DataView(buffer);
 
+    if (view.byteLength >= 36) {
+      try {
+        const wavChannels = view.getUint16(22, true) || 1;
+        const wavSampleRate = view.getUint32(24, true) || SAMPLE_RATE;
+        const wavBitDepth = view.getUint16(34, true) || 16;
+        this.logModuleAudioFormat(wavSampleRate, wavChannels, wavBitDepth, "little-endian (LE)");
+      } catch {}
+    }
+
     let pcmOffset = 44;
     if (
       view.getUint8(0) === 0x52 && // 'R'
@@ -210,6 +247,7 @@ export class NativeAudioSource implements AudioSource {
 
     const numChannels = buffer.channels || 1;
     const actualSampleRate = buffer.sampleRate || SAMPLE_RATE;
+    this.logModuleAudioFormat(actualSampleRate, numChannels, 16, "little-endian (LE)");
 
     if (buffer.data.byteLength % 2 !== 0) return;
     const view = new DataView(buffer.data);

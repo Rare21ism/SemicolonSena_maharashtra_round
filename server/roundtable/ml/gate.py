@@ -60,6 +60,7 @@ class GatedTickResult:
     device_metrics: dict[int, DeviceMetrics]
     device_just_opened: dict[int, bool] = field(default_factory=dict)
     forced_final_devices: set[int] = field(default_factory=set)
+    runner_up_device: Optional[int] = None
 
 
 
@@ -115,6 +116,7 @@ class AudioGate:
 
         # Sort descending by SNR
         active_candidates.sort(key=lambda x: x[1], reverse=True)
+        runner_up_device: Optional[int] = active_candidates[1][0] if len(active_candidates) >= 2 else None
 
         single_mode = self.config.overlap_mode != "both"
         if single_mode and active_candidates:
@@ -293,7 +295,19 @@ class AudioGate:
             device_metrics=metrics_by_dev,
             device_just_opened=device_just_opened,
             forced_final_devices=forced_final_devices,
+            runner_up_device=runner_up_device,
         )
+
+    def remove_device(self, device_idx: int) -> None:
+        """Immediately removes a disconnected device from gate state."""
+        self.device_states.pop(device_idx, None)
+        if hasattr(self.energy_tracker, "device_histories"):
+            self.energy_tracker.device_histories.pop(device_idx, None)
+        if self.selected_device == device_idx:
+            self.selected_device = None
+        if self.challenger_device == device_idx:
+            self.challenger_device = None
+            self.challenger_duration_ms = 0.0
 
     def reset(self) -> None:
         self.device_states.clear()

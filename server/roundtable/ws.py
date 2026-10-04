@@ -11,7 +11,16 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 from starlette.websockets import WebSocketDisconnected
 
-from roundtable.protocol import JoinMessage, PingMessage, ResumeMessage, unpack_audio_frame
+import numpy as np
+from roundtable.protocol import (
+    HEADER_STRUCT,
+    MSG_TYPE_AUDIO,
+    PROTOCOL_VERSION,
+    JoinMessage,
+    PingMessage,
+    ResumeMessage,
+    unpack_audio_frame,
+)
 from roundtable.sessions import DeviceSession, Session, session_manager
 
 logger = logging.getLogger("roundtable.ws")
@@ -51,39 +60,34 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
             try:
                 raw = message.get("bytes")
                 if raw is not None:
-                    received_ms = time.time() * 1000.0
+                    now_mono = time.monotonic()
                     if device is None:
                         await websocket.close(code=4401, reason="Join before sending audio")
                         close_code, close_reason = 4401, "Join before sending audio"
                         break
-                    if len(raw) > MAX_AUDIO_BYTES:
-                        await websocket.close(code=4400, reason="Audio frame too large")
-                        close_code, close_reason = 4400, "Audio frame too large"
-                        break
+                    if len(raw) < 20:
+                        device.unpack_errors += 1
+                        continue
                     try:
-                        frame = unpack_audio_frame(raw)
-                        if frame.device_idx != device.device_idx:
+                        msg_type, version, dev_idx, seq, capture_ts_ms, sample_count = HEADER_STRUCT.unpack_from(raw, 0)
+                        if msg_type != MSG_TYPE_AUDIO or version != PROTOCOL_VERSION:
+                            device.unpack_errors += 1
+                            continue
+                        if dev_idx != device.device_idx:
+                            device.drops_unknown_device += 1
+                            device.dropped_frames += 1
                             await websocket.close(code=4403, reason="Device index mismatch")
                             close_code, close_reason = 4403, "Device index mismatch"
                             break
-                        if session.audio_queue.full():
-                            try:
-                                dropped = session.audio_queue.get_nowait()
-                                session.audio_queue.task_done()
-                                dropped_device, dropped_frame = dropped[0], dropped[1]
-                                dropped_device.dropped_frames += 1
-                                logger.warning(
-                                    "pipeline_queue_drop_oldest session=%s device=%s seq=%s incoming_device=%s seq=%s",
-                                    session.session_id, dropped_device.device_idx, dropped_frame.seq,
-                                    device.device_idx, frame.seq,
-                                )
-                            except asyncio.QueueEmpty:
-                                pass
-                        await session.on_frame(frame.device_idx, frame.seq, frame.capture_ts_ms, frame.pcm, received_ms)
-                    except ValueError as exc:
-                        logger.warning("Invalid audio session=%s device=%s: %s", session.session_id, device.device_idx, exc)
-                    except Exception:
-                        logger.exception("Audio dispatch failed session=%s device=%s; keeping socket open", session.session_id, device.device_idx)
+                        expected_bytes = 20 + sample_count * 2
+                        if len(raw) < expected_bytes:
+                            device.unpack_errors += 1
+                            continue
+                        pcm = np.frombuffer(raw, dtype="<i2", count=sample_count, offset=20).copy()
+                        session.push_audio_frame(device.device_idx, seq, capture_ts_ms, pcm, now_mono)
+                    except Exception as exc:
+                        device.unpack_errors += 1
+                        logger.warning("Audio unpack failed session=%s device=%s: %s", session.session_id, device.device_idx, exc)
                     continue
 
                 text_data = message.get("text")
@@ -105,7 +109,10 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
                         if not parsed.name.strip() or len(parsed.name) > 80:
                             raise ValueError("Invalid device name")
                         device = await session.register_device(parsed.name.strip(), parsed.platform, parsed.token, websocket)
-                        logger.info("WebSocket joined session=%s device=%s reconnect=%s", session.session_id, device.device_idx, device.reconnect_count)
+                        logger.info(
+                            "device_idx assignment: session=%s device_idx=%s name=%r platform=%s token=%s reconnect_count=%s",
+                            session.session_id, device.device_idx, device.name, device.platform, device.token, device.reconnect_count,
+                        )
                         from roundtable.protocol import JoinedMessage
                         await websocket.send_json(JoinedMessage(device_idx=device.device_idx, token=device.token, session_clock_ms=session.get_session_clock_ms()).model_dump())
                         await session.broadcast_roster()
@@ -122,7 +129,10 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
                             break
                         previous = session.devices[device_idx]
                         device = await session.register_device(previous.name, previous.platform, parsed.token, websocket)
-                        logger.info("WebSocket resumed session=%s device=%s reconnect=%s last_seq=%s", session.session_id, device.device_idx, device.reconnect_count, parsed.last_seq)
+                        logger.info(
+                            "device reconnect/resume: session=%s device_idx=%s reconnect_count=%s last_seq=%s",
+                            session.session_id, device.device_idx, device.reconnect_count, parsed.last_seq,
+                        )
                         gap = await session.backfill(device, parsed.last_seq)
                         from roundtable.protocol import JoinedMessage
                         await websocket.send_json(JoinedMessage(device_idx=device.device_idx, token=device.token, session_clock_ms=session.get_session_clock_ms()).model_dump())
@@ -153,7 +163,10 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
             except Exception:
                 logger.exception("WebSocket dispatch failure session=%s device=%s; keeping socket open", session_id, getattr(device, "device_idx", None))
     finally:
-        logger.info("WebSocket disconnected session=%s device=%s code=%s reason=%r", session.code, getattr(device, "device_idx", None), close_code, close_reason)
+        logger.info(
+            "device disconnect: session=%s device_idx=%s code=%s reason=%r",
+            session.code, getattr(device, "device_idx", None), close_code, close_reason,
+        )
         if device:
             try:
                 await session.disconnect_device(device.device_idx, websocket)

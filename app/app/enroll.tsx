@@ -36,12 +36,17 @@ export default function VoiceEnrollmentScreen() {
   const capturedAudioRef = useRef<Int16Array[] | null>(null);
   const playbackRef = useRef<HTMLAudioElement | null>(null);
   const playbackUrlRef = useRef<string | null>(null);
+  const nativeRecorderRef = useRef<any>(null);
+  const recordedUriRef = useRef<string | null>(null);
 
   useEffect(() => () => {
     recordingRef.current = false;
     sourceRef.current?.stop();
     clientRef.current?.disconnect();
     playbackRef.current?.pause();
+    if (nativeRecorderRef.current) {
+      try { nativeRecorderRef.current.stop(); } catch {}
+    }
     if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current);
   }, []);
 

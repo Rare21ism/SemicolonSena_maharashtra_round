@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ConnectionBadge } from "../src/components/ConnectionBadge";
@@ -33,9 +33,11 @@ export default function LiveScreen() {
     leaveSession,
     toastMessage,
     clearToast,
+    debugInfo,
   } = useSession();
 
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [debugExpanded, setDebugExpanded] = useState(true);
 
   useEffect(() => {
     if (status === "disconnected") {
@@ -133,6 +135,54 @@ export default function LiveScreen() {
         isMuted={isMuted}
         onToggleMute={toggleMute}
       />
+
+      {/* Diagnostics Debug Overlay */}
+      <View style={styles.debugOverlay} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.debugHeader}
+          onPress={() => setDebugExpanded(!debugExpanded)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.debugHeaderTitle}>DEBUG OVERLAY</Text>
+          <Text style={styles.debugToggleIcon}>{debugExpanded ? "▾" : "▸"}</Text>
+        </TouchableOpacity>
+        {debugExpanded && (
+          <View style={styles.debugBody}>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>WS State:</Text>
+              <Text style={styles.debugValue}>{debugInfo.wsStatus}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Frames Sent/s:</Text>
+              <Text style={styles.debugValue}>{debugInfo.framesSentFps} fps</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Sample Rate:</Text>
+              <Text style={styles.debugValue}>{debugInfo.sampleRate} Hz</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Format:</Text>
+              <Text style={styles.debugValue}>{debugInfo.sampleFormat}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>First 3 capture_ts:</Text>
+              <Text style={styles.debugValue}>
+                {debugInfo.firstThreeCaptureTs.length > 0
+                  ? debugInfo.firstThreeCaptureTs.join(", ")
+                  : "waiting..."}
+              </Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Clock Offset:</Text>
+              <Text style={styles.debugValue}>{debugInfo.clockOffsetMs.toFixed(1)} ms</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Mic Level:</Text>
+              <Text style={styles.debugValue}>{debugInfo.micLevel.toFixed(3)}</Text>
+            </View>
+          </View>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -233,5 +283,63 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "center",
     maxWidth: 1220,
+  },
+  debugOverlay: {
+    position: "absolute",
+    top: 68,
+    right: 14,
+    zIndex: 999,
+    backgroundColor: "rgba(15, 23, 42, 0.92)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+    padding: 8,
+    maxWidth: 290,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  debugHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingBottom: 4,
+  },
+  debugHeaderTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#38bdf8",
+    letterSpacing: 1,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  debugToggleIcon: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+  },
+  debugBody: {
+    gap: 3,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.08)",
+  },
+  debugRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  debugLabel: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  debugValue: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#f8fafc",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
 });

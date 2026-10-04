@@ -9,7 +9,9 @@ configurable hold-back (~300 ms jitter buffer). Missing frames are replaced with
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections import deque
 import logging
+import time
 from typing import Optional
 import numpy as np
 
@@ -242,4 +244,177 @@ class SessionAligner:
         self.enrolled_devices.clear()
         self._device_buffers.clear()
         self._lookback_buffers.clear()
+
+
+@dataclass
+class ArrivalFrame:
+    pcm: np.ndarray
+    arrival_time: float
+    seq: int
+    capture_ts_ms: float
+
+
+class ArrivalAligner:
+    """
+    Arrival-time aligner for multi-device live streaming (ALIGN_MODE=arrival).
+    Maintains per-device FIFO deques stamped with server arrival time (monotonic seconds).
+    Each tick, for every device that sent a frame in the last 500 ms:
+    - pops its oldest unconsumed frames
+    - if more than 3 frames (300 ms) are queued, discards the oldest so only the newest 2 remain (logs discards)
+    - produces exactly one 1600-sample chunk per device per tick (pad with zeros if short, trim if long)
+    - devices with no frame in the last 500 ms are treated as absent (not zero-filled, not in gate)
+    - maintains 300 ms lookback for pre-roll
+    """
+
+    def __init__(
+        self,
+        samples_per_tick: int = SAMPLES_PER_TICK,
+        lookback_samples: int = 4800,  # 300 ms at 16 kHz
+    ):
+        self.samples_per_tick = samples_per_tick
+        self.lookback_samples = lookback_samples
+        self.device_queues: dict[int, deque[ArrivalFrame]] = {}
+        self.enrolled_devices: set[int] = set()
+        self.disconnected_devices: set[int] = set()
+        self.last_arrival_time: dict[int, float] = {}
+        self.arrival_history: dict[int, deque[float]] = {}
+        self.device_discards: dict[int, int] = {}
+        self.lookback_buffers: dict[int, np.ndarray] = {}
+
+    def enroll_device(self, device_idx: int) -> None:
+        self.enrolled_devices.add(device_idx)
+        self.disconnected_devices.discard(device_idx)
+        if device_idx not in self.device_queues:
+            self.device_queues[device_idx] = deque()
+        if device_idx not in self.lookback_buffers:
+            self.lookback_buffers[device_idx] = np.zeros(0, dtype=np.int16)
+
+    def remove_device(self, device_idx: int) -> None:
+        """Immediately marks device as disconnected and empties its unconsumed queue."""
+        self.disconnected_devices.add(device_idx)
+        if device_idx in self.device_queues:
+            self.device_queues[device_idx].clear()
+        if device_idx in self.lookback_buffers:
+            self.lookback_buffers[device_idx] = np.zeros(0, dtype=np.int16)
+
+    def push_frame(
+        self,
+        device_idx: int,
+        pcm: np.ndarray,
+        arrival_time: float,
+        seq: int = 0,
+        capture_ts_ms: float = 0.0,
+    ) -> None:
+        if pcm.dtype != np.int16:
+            pcm = pcm.astype(np.int16)
+        self.enroll_device(device_idx)
+        self.last_arrival_time[device_idx] = arrival_time
+        self.arrival_history.setdefault(device_idx, deque(maxlen=200)).append(arrival_time)
+        self.device_queues[device_idx].append(
+            ArrivalFrame(pcm=pcm, arrival_time=arrival_time, seq=seq, capture_ts_ms=capture_ts_ms)
+        )
+
+    def extract_tick(
+        self,
+        now_mono: float,
+        tick_idx: int,
+        t_start_ms: float,
+        t_end_ms: float,
+    ) -> Optional[TickData]:
+        device_pcms: dict[int, np.ndarray] = {}
+        device_pre_rolls: dict[int, np.ndarray] = {}
+
+        for dev_idx in list(self.enrolled_devices):
+            if dev_idx in self.disconnected_devices:
+                continue
+
+            last_arrival = self.last_arrival_time.get(dev_idx, 0.0)
+            # Devices with no frame in the last 500 ms are treated as absent
+            # (not zero-filled, not counted in the gate, no lane fed)
+            if now_mono - last_arrival > 0.5:
+                continue
+
+            q = self.device_queues.setdefault(dev_idx, deque())
+
+            # If more than 3 frames (300 ms) are queued, discard oldest so only newest 2 remain
+            if len(q) > 3:
+                discard_count = len(q) - 2
+                for _ in range(discard_count):
+                    q.popleft()
+                self.device_discards[dev_idx] = self.device_discards.get(dev_idx, 0) + discard_count
+                logger.warning(
+                    "[ArrivalAligner] Device %d queue overflow (%d > 3): discarded %d frames, 2 remaining",
+                    dev_idx, len(q) + discard_count, discard_count,
+                )
+
+            # Pop oldest unconsumed frame
+            if len(q) > 0:
+                frame = q.popleft()
+                raw_pcm = frame.pcm
+            else:
+                raw_pcm = np.zeros(0, dtype=np.int16)
+
+            # Produce exactly one 1600-sample chunk per device per tick (pad with zeros if short, trim if long)
+            if len(raw_pcm) < self.samples_per_tick:
+                chunk = np.zeros(self.samples_per_tick, dtype=np.int16)
+                if len(raw_pcm) > 0:
+                    chunk[: len(raw_pcm)] = raw_pcm
+            elif len(raw_pcm) > self.samples_per_tick:
+                chunk = raw_pcm[: self.samples_per_tick]
+            else:
+                chunk = raw_pcm
+
+            # Pre-roll lookback (last 300 ms)
+            cur_lb = self.lookback_buffers.get(dev_idx)
+            if cur_lb is not None and len(cur_lb) > 0:
+                device_pre_rolls[dev_idx] = cur_lb.copy()
+            else:
+                device_pre_rolls[dev_idx] = np.zeros(0, dtype=np.int16)
+
+            new_lb = np.concatenate([device_pre_rolls[dev_idx], chunk])
+            if len(new_lb) > self.lookback_samples:
+                new_lb = new_lb[-self.lookback_samples :]
+            self.lookback_buffers[dev_idx] = new_lb
+
+            device_pcms[dev_idx] = chunk
+
+        if not device_pcms:
+            return None
+
+        return TickData(
+            tick_idx=tick_idx,
+            t_start_ms=t_start_ms,
+            t_end_ms=t_end_ms,
+            device_pcms=device_pcms,
+            device_pre_rolls=device_pre_rolls,
+        )
+
+    def get_queue_depth(self, device_idx: int) -> int:
+        return len(self.device_queues.get(device_idx, ()))
+
+    def get_discards(self, device_idx: int) -> int:
+        return self.device_discards.get(device_idx, 0)
+
+    def get_ms_since_last_frame(self, device_idx: int, now_mono: Optional[float] = None) -> float:
+        now = now_mono if now_mono is not None else time.monotonic()
+        last = self.last_arrival_time.get(device_idx)
+        if last is None:
+            return -1.0
+        return max(0.0, round((now - last) * 1000.0, 1))
+
+    def get_arrival_fps(self, device_idx: int, now_mono: Optional[float] = None, window_s: float = 2.0) -> float:
+        now = now_mono if now_mono is not None else time.monotonic()
+        history = self.arrival_history.get(device_idx, ())
+        cutoff = now - window_s
+        count = sum(1 for t in history if t >= cutoff)
+        return round(count / window_s, 1)
+
+    def reset(self) -> None:
+        self.device_queues.clear()
+        self.enrolled_devices.clear()
+        self.disconnected_devices.clear()
+        self.last_arrival_time.clear()
+        self.arrival_history.clear()
+        self.device_discards.clear()
+        self.lookback_buffers.clear()
 
