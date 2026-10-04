@@ -128,7 +128,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const toggleMute = useCallback(() => {
-    setIsMuted((prev) => !prev);
+    setIsMuted((prev) => {
+      const next = !prev;
+      isMutedRef.current = next;
+      return next;
+    });
   }, []);
 
   // Update caption or append

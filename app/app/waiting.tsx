@@ -6,18 +6,23 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radii, spacing, typography } from "../src/theme";
 import { Button } from "../src/components/Button";
-import { ParticipantCard } from "../src/components/ParticipantCard";
+import { ConnectionBadge } from "../src/components/ConnectionBadge";
+import { RoundtableSpatialMotif } from "../src/components/RoundtableSpatialMotif";
 import { Toast } from "../src/components/Toast";
 import { useSession } from "../src/state/SessionContext";
 
 export default function MeetingLobbyScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const compact = width < 760;
+  const compactContentWidth = Math.max(280, width - 40);
   const {
     sessionCode,
     sessionName,
@@ -25,7 +30,9 @@ export default function MeetingLobbyScreen() {
     name,
     roster,
     myDeviceIdx,
+    status,
     connectToSession,
+    leaveSession,
     toastMessage,
     clearToast,
   } = useSession();
@@ -37,130 +44,153 @@ export default function MeetingLobbyScreen() {
   }, [connectToSession, name, sessionCode]);
 
   const handleCopyCode = () => {
-    Clipboard.setString(sessionCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      Clipboard.setString(sessionCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // The code remains visible for manual sharing if clipboard access is unavailable.
+    }
   };
 
-  const handleStartMeeting = () => {
-    connectToSession(sessionCode, name);
-    router.replace({
-      pathname: "/live",
-      params: { code: sessionCode, name },
-    });
+  const handleEnter = () => {
+    router.replace({ pathname: "/live", params: { code: sessionCode, name } });
   };
 
   const handleLeave = () => {
+    leaveSession();
     router.replace("/");
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Toast message={toastMessage} onDismiss={clearToast} />
-
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          compact && styles.scrollContentCompact,
+          compact && { width: compactContentWidth, alignSelf: "center" },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Top Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={handleLeave}
+            accessibilityRole="button"
+            accessibilityLabel="Leave room"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="close" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>CONVERSATION LOBBY</Text>
-          <View style={{ width: 32 }} />
+          <Text style={styles.headerBrand}>ROUNDTABLE</Text>
+          <ConnectionBadge status={status} />
         </View>
 
-        {/* Room Banner */}
-        <View style={styles.roomBanner}>
-          <Text style={styles.bannerKicker}>ROOM READY</Text>
-          <Text style={styles.sessionTitle} numberOfLines={1}>
-            {sessionName || "Group Discussion"}
-          </Text>
+        <View style={[styles.mainLayout, compact && styles.mainLayoutCompact, compact && { width: compactContentWidth }]}>
+          <View style={[styles.roomColumn, compact && styles.roomColumnCompact]}>
+            <Text style={styles.eyebrow}>{isHost ? "YOUR ROOM IS READY" : "YOU'RE IN"}</Text>
+            <Text style={[styles.title, compact && styles.titleCompact, compact && { width: compactContentWidth, maxWidth: compactContentWidth }]}>
+              {roster.length > 1 ? "The conversation is gathering." : "Make yourself at home."}
+            </Text>
+            <Text style={[styles.description, compact && { width: compactContentWidth, maxWidth: compactContentWidth }]}>
+              {roster.length > 1
+                ? `${roster.length} people are connected. Head into the live room whenever you're ready.`
+                : "Share the room code with your group. When you're ready, enter the live room to start the transcript."}
+            </Text>
 
-          <TouchableOpacity
-            style={styles.codePill}
-            onPress={handleCopyCode}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.codeLabel}>MEETING CODE</Text>
-            <Text style={styles.codeText}>{sessionCode}</Text>
-            <Ionicons
-              name={copied ? "checkmark-circle" : "copy-outline"}
-              size={16}
-              color={copied ? colors.success : colors.textMuted}
-            />
-          </TouchableOpacity>
+            <View style={styles.roomCard}>
+              <View style={styles.roomCardTop}>
+                <View style={styles.roomTitleWrap}>
+                  <Text style={styles.roomLabel}>ROOM</Text>
+                  <Text style={styles.roomTitle} numberOfLines={2}>
+                    {sessionName || "Group Discussion"}
+                  </Text>
+                </View>
+                <View style={styles.livePresence}>
+                  <View style={[styles.connectionDot, status === "connected" && styles.connectionDotOn]} />
+                  <Text style={styles.livePresenceText}>{status === "connected" ? "Connected" : "Connecting"}</Text>
+                </View>
+              </View>
 
-          <Text style={styles.roomNotice}>
-            Place your phones or laptops on the table. Audio from all connected devices will stream into a unified live transcript.
-          </Text>
-        </View>
+              <View style={styles.codeRow}>
+                <View>
+                  <Text style={styles.codeLabel}>SHARE THIS CODE</Text>
+                  <Text style={styles.codeValue} accessibilityLabel={`Room code ${sessionCode}`}>
+                    {sessionCode || "------"}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.copyButton}
+                  onPress={handleCopyCode}
+                  accessibilityRole="button"
+                  accessibilityLabel={copied ? "Room code copied" : "Copy room code"}
+                >
+                  <Ionicons name={copied ? "checkmark" : "copy-outline"} size={17} color={colors.primary} />
+                  <Text style={styles.copyText}>{copied ? "Copied" : "Copy"}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
-        {/* Participant Roster Section */}
-        <View style={styles.rosterSection}>
-          <View style={styles.rosterHeader}>
-            <Text style={styles.rosterLabel}>CONNECTED PEOPLE</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>
-                {roster.length} {roster.length === 1 ? "person" : "people"}
-              </Text>
+            <View style={styles.motifWrap}>
+              <RoundtableSpatialMotif />
             </View>
           </View>
 
-          <View style={styles.participantList}>
-            {roster.map((dev) => {
-              const isSelf = dev.device_idx === myDeviceIdx;
-              return (
-                <ParticipantCard
-                  key={dev.device_idx}
-                  device={dev}
-                  isSelf={isSelf}
-                  statusText={isSelf ? "Microphone active" : "Connected"}
-                  connectionQuality="good"
-                />
-              );
-            })}
-          </View>
-        </View>
+          <View style={[styles.peopleColumn, compact && styles.peopleColumnCompact]}>
+            <View style={styles.peoplePanel}>
+              <View style={styles.peopleHeader}>
+                <View>
+                  <Text style={styles.panelKicker}>ROOM PRESENCE</Text>
+                  <Text style={styles.peopleTitle}>People here</Text>
+                </View>
+                <View style={styles.countBadge} accessibilityLabel={`${roster.length} people connected`}>
+                  <Text style={styles.countText}>{roster.length}</Text>
+                </View>
+              </View>
 
-        {/* Action Controls */}
-        <View style={styles.actionSection}>
-          {isHost ? (
-            <Button
-              title="Start Live Conversation"
-              variant="primary"
-              size="lg"
-              icon={<Ionicons name="play" size={18} color="#FBF9F5" />}
-              onPress={handleStartMeeting}
-              style={styles.actionBtn}
-            />
-          ) : (
-            <View style={styles.waitingNoticeBox}>
-              <View style={styles.waitingDot} />
-              <Text style={styles.waitingNoticeText}>
-                Waiting for host to start conversation…
-              </Text>
+              {roster.length > 0 ? (
+                <View style={styles.peopleList}>
+                  {roster.map((person) => {
+                    const isSelf = person.device_idx === myDeviceIdx;
+                    return (
+                      <View key={person.device_idx} style={styles.personRow}>
+                        <View style={[styles.personMark, { backgroundColor: person.color || colors.primary }]}>
+                          <Text style={styles.personInitial}>{person.name.trim().charAt(0).toUpperCase() || "?"}</Text>
+                        </View>
+                        <View style={styles.personInfo}>
+                          <Text style={styles.personName} numberOfLines={1}>{person.name}{isSelf ? " (you)" : ""}</Text>
+                          <Text style={styles.personStatus}>{isSelf ? "You're connected" : "Connected"}</Text>
+                        </View>
+                        {isSelf && <Text style={styles.hostTag}>{isHost ? "HOST" : "YOU"}</Text>}
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.peopleEmpty}>
+                  <Ionicons name="people-outline" size={20} color={colors.textMuted} />
+                  <Text style={styles.peopleEmptyTitle}>Waiting for your connection</Text>
+                  <Text style={styles.peopleEmptyCopy}>Your name will appear here once you're connected.</Text>
+                </View>
+              )}
+
+              <View style={styles.panelDivider} />
+              <Text style={styles.nextLabel}>NEXT</Text>
+              <Text style={styles.nextCopy}>Settle in, then open the live transcript when your group is ready.</Text>
               <Button
-                title="Enter Live View"
-                variant="secondary"
-                size="md"
-                onPress={handleStartMeeting}
-                style={{ marginTop: 14 }}
+                title="Enter live room"
+                variant="primary"
+                size="lg"
+                icon={<Ionicons name="arrow-forward" size={18} color="#FBF9F5" />}
+                onPress={handleEnter}
+                style={styles.enterButton}
               />
+              <TouchableOpacity style={styles.leaveLink} onPress={handleLeave} accessibilityRole="button">
+                <Text style={styles.leaveText}>Leave room</Text>
+              </TouchableOpacity>
             </View>
-          )}
-
-          <Button
-            title="Leave Lobby"
-            variant="ghost"
-            size="md"
-            onPress={handleLeave}
-          />
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -168,150 +198,75 @@ export default function MeetingLobbyScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
+  safeArea: { flex: 1, backgroundColor: colors.bgPrimary },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-    paddingBottom: 48,
-    maxWidth: 580,
+    flexGrow: 1,
     width: "100%",
+    maxWidth: 1240,
     alignSelf: "center",
+    paddingHorizontal: 48,
+    paddingVertical: 24,
+    paddingBottom: 36,
   },
+  scrollContentCompact: { width: "100%", maxWidth: "100%", alignSelf: "stretch", flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, paddingVertical: 16, paddingBottom: 28 },
   header: {
+    minHeight: 46,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 24,
-    paddingBottom: 16,
+    gap: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
-  },
-  backButton: {
-    padding: 8,
-    borderRadius: radii.sm,
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-  },
-  headerTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.textPrimary,
-    letterSpacing: 2,
-  },
-  roomBanner: {
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    alignItems: "flex-start",
+    paddingBottom: 14,
     marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  bannerKicker: {
-    ...typography.label,
-    color: colors.primaryLight,
-    marginBottom: 4,
-  },
-  sessionTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: colors.textPrimary,
-    marginBottom: 14,
-    letterSpacing: -0.5,
-  },
-  codePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.bgSecondary,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: radii.md,
-    gap: 10,
-    marginBottom: 16,
-  },
-  codeLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.textMuted,
-    letterSpacing: 1.2,
-  },
-  codeText: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.textPrimary,
-    fontFamily: "monospace",
-    letterSpacing: 2,
-  },
-  roomNotice: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 22,
-  },
-  rosterSection: {
-    marginBottom: 28,
-  },
-  rosterHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  rosterLabel: {
-    ...typography.label,
-  },
-  countBadge: {
-    backgroundColor: colors.successBg,
-    borderWidth: 1,
-    borderColor: "rgba(43, 97, 64, 0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: radii.full,
-  },
-  countText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.success,
-  },
-  participantList: {
-    gap: 8,
-  },
-  actionSection: {
-    gap: 12,
-  },
-  actionBtn: {
-    width: "100%",
-  },
-  waitingNoticeBox: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    padding: spacing.md,
-    alignItems: "center",
-    width: "100%",
-  },
-  waitingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.warning,
-    marginBottom: 8,
-  },
-  waitingNoticeText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: "center",
-    fontWeight: "500",
-  },
+  backButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: radii.sm, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderDefault },
+  headerBrand: { ...typography.label, color: colors.primary, letterSpacing: 1.7, flex: 1 },
+  mainLayout: { flex: 1, flexDirection: "row", alignItems: "center", gap: 54 },
+  mainLayoutCompact: { flex: 0, flexGrow: 0, flexShrink: 0, width: "100%", flexDirection: "column", alignItems: "stretch", gap: 24 },
+  roomColumn: { flex: 1.08, justifyContent: "center", paddingVertical: 12 },
+  roomColumnCompact: { width: "100%", alignSelf: "stretch", flex: 0, flexGrow: 0, flexShrink: 0, paddingVertical: 0 },
+  peopleColumn: { flex: 0.92, maxWidth: 490, width: "100%", alignSelf: "center" },
+  peopleColumnCompact: { width: "100%", maxWidth: 560, alignSelf: "stretch", flex: 0, flexGrow: 0, flexShrink: 0 },
+  eyebrow: { ...typography.label, color: colors.accentTerracotta, marginBottom: 13 },
+  title: { ...typography.display1, fontSize: 48, lineHeight: 54, maxWidth: 610 },
+  titleCompact: { fontSize: 39, lineHeight: 44, letterSpacing: -1.1 },
+  description: { ...typography.body, fontSize: 16, lineHeight: 25, maxWidth: 560, marginTop: 14, marginBottom: 24 },
+  roomCard: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderDefault, borderRadius: radii.lg, padding: 18, maxWidth: 540 },
+  roomCardTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },
+  roomTitleWrap: { flex: 1 },
+  roomLabel: { ...typography.label, fontSize: 9, marginBottom: 3 },
+  roomTitle: { ...typography.h3, fontSize: 18 },
+  livePresence: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 5, paddingHorizontal: 8, backgroundColor: colors.bgSecondary, borderRadius: radii.full },
+  connectionDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
+  connectionDotOn: { backgroundColor: colors.success },
+  livePresenceText: { fontSize: 11, fontWeight: "600", color: colors.textSecondary },
+  codeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 13, borderTopWidth: 1, borderTopColor: colors.borderSubtle },
+  codeLabel: { ...typography.label, fontSize: 9, marginBottom: 3 },
+  codeValue: { ...typography.code, fontSize: 20, color: colors.textPrimary, letterSpacing: 3 },
+  copyButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, minHeight: 42, borderRadius: radii.sm, backgroundColor: colors.bgSecondary },
+  copyText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  motifWrap: { alignSelf: "flex-start", marginTop: 8 },
+  peoplePanel: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderDefault, borderRadius: radii.xl, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.04, shadowRadius: 16, elevation: 2 },
+  peopleHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 17 },
+  panelKicker: { ...typography.label, color: colors.primaryLight, fontSize: 9, marginBottom: 4 },
+  peopleTitle: { ...typography.h2, fontSize: 23, lineHeight: 29 },
+  countBadge: { minWidth: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.successBg, borderWidth: 1, borderColor: "rgba(43, 97, 64, 0.2)" },
+  countText: { color: colors.success, fontWeight: "800", fontSize: 13 },
+  peopleList: { gap: 12 },
+  personRow: { flexDirection: "row", alignItems: "center", gap: 11, minHeight: 46 },
+  personMark: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  personInitial: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
+  personInfo: { flex: 1 },
+  personName: { color: colors.textPrimary, fontSize: 14, fontWeight: "700" },
+  personStatus: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  hostTag: { color: colors.primaryLight, fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+  peopleEmpty: { paddingVertical: 16, alignItems: "flex-start", gap: 5 },
+  peopleEmptyTitle: { color: colors.textPrimary, fontWeight: "700", fontSize: 14, marginTop: 5 },
+  peopleEmptyCopy: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
+  panelDivider: { height: 1, backgroundColor: colors.borderSubtle, marginTop: 18, marginBottom: 16 },
+  nextLabel: { ...typography.label, fontSize: 9, color: colors.textMuted, marginBottom: 5 },
+  nextCopy: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: spacing.md },
+  enterButton: { width: "100%" },
+  leaveLink: { minHeight: 42, alignItems: "center", justifyContent: "center", marginTop: 5 },
+  leaveText: { color: colors.textMuted, fontSize: 13, fontWeight: "600" },
 });

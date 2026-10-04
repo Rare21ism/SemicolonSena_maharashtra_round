@@ -1,754 +1,1003 @@
-# Roundtable — Full Post-Merge Integration Test & Fix
+# Roundtable — Create Room, Waiting Room & Live Room UI/UX Redesign + Live Caption Fix
 
 Repository:
 https://github.com/Rare21ism/SemicolonSena_maharashtra_round
 
-We are now working on the CURRENT MERGED `main` branch.
+## Objective
 
-IMPORTANT:
-The fake/mock client and mock user testing flow have been REMOVED.
+Redesign and properly integrate the three core meeting states/pages:
 
-DO NOT bring them back.
+1. **Create Room**
+2. **Waiting Room**
+3. **Live Room**
 
-DO NOT recreate them.
+The current problem is NOT simply the color/theme.
 
-DO NOT require `fake_client.py`.
+The existing pages leave a large amount of unused white space and the component composition does not make good use of the available viewport.
 
-DO NOT use MockPipeline.
+The **Live Room is the highest priority** because its captioning UI currently feels broken and visually disconnected.
 
-DO NOT generate synthetic captions.
+Keep the existing Roundtable color theme and visual identity.
 
-DO NOT create fake participants.
+Do NOT replace the established color palette with a completely different theme.
 
-The real application must work through:
+The goal is to improve:
 
-REAL MICROPHONE
-→ REAL AUDIO CAPTURE
-→ REAL WEBSOCKET
-→ REAL FASTAPI BACKEND
-→ REAL SESSION
-→ REAL ML PIPELINE
-→ REAL ASR / SPEAKER PROCESSING
-→ REAL CAPTIONS
-→ REAL FRONTEND
+- information hierarchy
+- layout composition
+- useful use of whitespace
+- caption readability
+- speaker separation
+- meeting-state clarity
+- controls
+- responsive behavior
+- visual polish
+- accessibility
 
-Your job is to test this complete system and FIX any problems you encounter.
+Do NOT rewrite working backend/audio/ML functionality just for UI changes.
 
-Do not merely report failures.
+---
 
-For every failure:
+# 1. DESIGN INSPIRATION
 
-REPRODUCE
-→ DIAGNOSE
-→ FIX
-→ RETEST
-→ REGRESSION TEST
+You may browse and study modern meeting-room, waiting-room, accessibility, live-caption and editorial product interfaces before implementing.
 
-Do not stop until the real end-to-end flow is working or you have identified a genuine environment limitation.
+Useful references/patterns include:
 
-============================================================
-# 1. READ THE CURRENT PROJECT FIRST
-============================================================
+- Google Meet-style waiting room and participant states
+- Microsoft Teams speaker-aware captions
+- transcript-first interfaces
+- accessibility-focused live caption interfaces
+- modern editorial/product layouts
+- premium asymmetric layouts
+- clean meeting-room interfaces
 
-Before changing anything, inspect:
+Useful research references:
 
-- AGENTS.md
-- README.md
-- package.json
-- justfile
-- app/
-- packages/protocol/
-- server/
-- eval/
+Google Meet waiting-room behavior:
+https://support.google.com/meet/answer/16523457
 
-Understand the current merged architecture.
+Microsoft Teams closed captions / intelligent speakers:
+https://www.microsoft.com/en-in/microsoft-teams/accessibility-closed-captions-transcriptions
 
-Do not assume that the older branch structure still exists.
+Accessible live-caption presentation:
+https://github.com/kellylford/LiveCaptionsWithAccessibility
 
-The CURRENT `main` branch is the source of truth.
+Realtime captioning product inspiration:
+https://waavoo.com/
 
-Pay special attention to:
+Meeting-room/product composition inspiration:
+https://wbroom.com/en/
 
-app/
-app/src/audio/
-app/src/net/
-app/src/components/
-app/app/
+These are inspiration only.
 
-packages/protocol/
+DO NOT copy their branding, exact layouts, colors, or components.
 
-server/roundtable/
-server/roundtable/pipeline/
-server/roundtable/ml/
+The final interface must remain distinctly Roundtable.
 
-============================================================
-# 2. IMPORTANT — NO MOCK/Fake FLOW
-============================================================
+The important design principles are:
 
-The following are NOT part of the acceptance criteria:
+- strong visual hierarchy
+- purposeful use of space
+- readable captions
+- clear speaker identity
+- compact controls
+- intentional composition
+- restrained visual language
+- accessibility
+- real-time state visibility
 
-- fake client
-- mock users
-- MockPipeline
-- synthetic captions
-- fake microphone input
-- hardcoded participants
-- hardcoded caption responses
+---
 
-Do NOT restore any of these.
+# 2. IMPORTANT — USE THE EXISTING COLOR THEME
 
-If you find old mock infrastructure that is no longer used by production:
+Do NOT redesign the entire color system.
 
-do not re-enable it.
+Preserve the current Roundtable theme.
 
-If dead mock code is causing problems, remove it only if safe and appropriate.
+You may refine:
 
-The user-facing application must always attempt the real pipeline.
+- contrast
+- shades
+- borders
+- backgrounds
+- active states
+- muted states
 
-If the real ML pipeline cannot start:
+But the application should still clearly look like the same Roundtable product.
 
-SHOW A REAL ERROR.
+The redesign is primarily about:
 
-Do not silently fall back to fake behavior.
+LAYOUT
++
+COMPONENTS
++
+HIERARCHY
++
+SPACING
++
+CAPTION PRESENTATION
++
+INTERACTION
 
-============================================================
-# 3. ESTABLISH BASELINE
-============================================================
+Not about replacing the theme.
 
-Run the existing test suite before making changes.
+---
 
-Run:
+# 3. FIRST INSPECT THE CURRENT CODE
 
-    just test
+Before changing anything:
 
-Also run:
+Inspect the actual current `main` branch.
 
-    npm --workspace=@roundtable/protocol test
+Identify:
 
-and:
+- Create Room page/component
+- Waiting page/component
+- Live Room page/component
+- meeting state management
+- participant state
+- microphone state
+- caption state
+- speaker state
+- loading indicators
+- connection state
+- mute behavior
+- existing responsive styles
+- existing reusable components
 
-    cd server
-    uv run pytest
+Understand the actual state transitions:
 
-Check for:
+Create Room
+→ Waiting
+→ Live Room
 
-- failures
-- warnings
-- import errors
-- type errors
-- build errors
-- runtime errors
+Do not assume the routes or component names.
 
-Record the baseline.
+Reuse real application state.
 
-Then fix issues one by one.
+Do not hardcode fake participants or captions into the actual meeting.
 
-============================================================
-# 4. STATIC / BUILD VALIDATION
-============================================================
+---
 
-Check the complete repository for:
+# 4. MAJOR RULE — DO NOT JUST RESTYLE
 
-- TypeScript errors
-- Python syntax errors
-- broken imports
-- stale imports
-- incorrect exports
-- duplicate implementations
-- broken module paths
-- merge artifacts
-- environment configuration errors
-- protocol mismatches
-- dead references to removed mock/fake code
+Do NOT simply:
 
-Search for merge artifacts:
+- change colors
+- increase font sizes
+- change border radius
+- add shadows
+- change background
+- adjust one or two margins
 
-<<<<<<<
-=======
->>>>>>>
+The component composition itself should improve.
 
-Also search for references to:
+You may:
 
-MockPipeline
-fake_client
-mock captions
-synthetic captions
-fake users
+- remove unnecessary components
+- create new components
+- reorganize layouts
+- combine related elements
+- move controls
+- introduce useful visual modules
+- change the caption structure
+- change the page grid
 
-Determine whether any of them are still incorrectly connected to the production user flow.
+The result should look like a deliberate product redesign.
 
-Do not reintroduce them.
+---
 
-============================================================
-# 5. START THE REAL BACKEND
-============================================================
+# 5. CREATE ROOM PAGE
 
-Start:
+## Current problem
 
-    just dev-server
+The Create Room page has too much unused white space.
 
-The backend should use the REAL ASR pipeline.
+Do not simply center the existing form in the middle of the screen.
 
-According to the current README:
+Use the available space intelligently.
 
-- FastAPI runs on port 8000
-- WebSocket endpoint is:
-  ws://localhost:8000/ws/{session_id}
+## Desired structure
 
-Verify:
+Create a strong two-part composition.
 
-    GET http://localhost:8000/health
+### LEFT / PRIMARY AREA
 
-Verify that the server starts successfully.
+Large editorial heading such as:
 
-If ML dependencies/models are missing:
+CREATE A ROOM
 
-do not switch to a mock.
+or a better Roundtable-specific phrase.
 
-Diagnose the missing dependency/model/configuration.
+Supporting copy should explain the purpose in one or two short sentences.
 
-============================================================
-# 6. START THE REAL FRONTEND
-============================================================
+Example concept:
 
-Start:
+"Bring everyone into the same conversation."
 
-    just dev-web
+Do not use technical terminology.
 
-Open:
+### RIGHT / ACTION AREA
 
-    http://localhost:8081
+A clearly structured creation panel containing only the information actually required to create the room.
 
-Verify:
+For example:
 
-- app loads
-- no fatal browser errors
-- no blank screen
-- no React runtime crash
-- no Web Audio fatal error
-- no WebSocket initialization error
+Room name
 
-Check browser console.
+Your name
 
-Fix real errors.
+Create room
 
-Do not suppress errors just to make the console look clean.
+Keep the actual form compact.
 
-============================================================
-# 7. TRACE THE COMPLETE REAL DATA PATH
-============================================================
+Do not make the form unnecessarily tall.
 
-Trace this exact path through the actual code:
+### SUPPORTING VISUAL
 
-REAL MICROPHONE
-    ↓
-AudioSource
-    ↓
-PCM16 frames
-    ↓
-WebSocket client
-    ↓
-FastAPI WebSocket
-    ↓
-Session
-    ↓
-Audio queue / dispatcher
-    ↓
-REAL PIPELINE
-    ↓
-VAD / gating
-    ↓
-speaker processing
-    ↓
-REAL ASR
-    ↓
-draft caption
-    ↓
-final/revised caption
-    ↓
-broadcast
-    ↓
-WebSocket client
-    ↓
-frontend state
-    ↓
-caption UI
+Use the remaining space for a meaningful Roundtable visual.
 
-Verify every stage.
+Possible concept:
 
-If the path breaks:
+A small conversation-orbit visualization showing several people converging around a shared conversation.
 
-identify the exact boundary.
+Or a subtle representation of:
 
-Do not simply say:
+PEOPLE
+→
+ROOM
+→
+CONVERSATION
 
-"backend isn't connected."
+Do NOT use a generic stock illustration.
 
-Find exactly where the data stops.
+Do NOT use an AI robot.
 
-============================================================
-# 8. REAL MICROPHONE TEST
-============================================================
+Do NOT fill space with random decorative blobs.
 
-Test the actual browser microphone.
+The visual must belong to Roundtable.
 
-Do not simulate it.
+## Bottom / secondary information
 
-Test:
+Use a subtle lower section for useful information such as:
 
-1. Open application.
-2. Start microphone setup/enrollment.
-3. Browser requests microphone permission.
-4. User grants permission.
-5. AudioSource starts.
-6. Audio callback starts.
-7. Audio frames are generated.
-8. Frames contain actual non-zero PCM data.
-9. Capture continues for the full expected duration.
-10. Capture stops only when intended.
-11. Cleanup occurs correctly.
+- how joining works
+- meeting link sharing
+- microphone requirement
 
-Verify:
+Only if it is actually useful.
 
-- mono
-- 16 kHz
-- PCM16 / int16
-- correct sample count
-- approximately 100 ms frames
-- correct sequence numbers
-- valid timestamps
-- non-empty audio payload
+Do not add unnecessary feature cards.
 
-============================================================
-# 9. INVESTIGATE MICROPHONE LIFECYCLE
-============================================================
+---
 
-The previous implementation showed:
+# 6. CREATE ROOM — RESPONSIVE
 
-[WebAudioSource] Capture stopped
+Desktop:
 
-Investigate this carefully.
+Use the full viewport.
 
-Determine:
+Example composition:
 
-WHO calls stop?
+------------------------------------------------
+| navigation                                     |
+|                                                |
+| CREATE A ROOM          [ creation panel ]      |
+|                                                |
+| large heading           room name              |
+| short explanation       your name              |
+| conversation visual     CREATE ROOM            |
+|                                                |
+------------------------------------------------
 
-WHY?
+Do NOT make this a strict centered card.
 
-WHEN?
+Mobile:
 
-Is it intentional?
+Stack intelligently.
 
-Does it happen before the expected recording duration?
+Heading first.
 
-Trace:
+Form second.
 
-permission
-→ AudioContext
-→ MediaStream
-→ AudioWorklet
-→ frame callback
-→ WebSocket
-→ cleanup
+Visual/supporting information after it.
 
-If capture stops prematurely:
+Do not create excessive vertical gaps.
 
-fix the lifecycle bug.
+---
 
-Do not merely remove the log.
+# 7. WAITING PAGE / WAITING ROOM
+
+The waiting state should feel intentional rather than like an empty loading screen.
+
+The user should immediately understand:
+
+- the room exists
+- they are connected
+- who is here
+- what they are waiting for
+- what they can do next
+
+## Main composition
+
+Use a strong split or asymmetric layout.
+
+### PRIMARY AREA
+
+Large message:
+
+YOU'RE IN.
+
+or:
+
+WAITING FOR THE CONVERSATION TO BEGIN
+
+Choose wording that fits the actual state.
+
+Show:
+
+Room name
+
+Meeting code / shareable identifier if available
+
+A subtle connection state.
+
+### PARTICIPANT AREA
+
+Create a compact participant presence section.
+
+Example:
+
+IN THE ROOM
+
+● Jemish
+● Priya
+○ Rahul
+
+Do NOT make huge profile cards.
+
+Use small, elegant presence indicators.
+
+If the host/creator is known, make that clear without excessive badges.
+
+### ROOM VISUAL
+
+Use a meaningful visual representation of the waiting state.
+
+For example:
+
+A conversation orbit with participants waiting around an inactive center.
+
+When another participant joins:
+
+the visual changes subtly.
+
+This gives the waiting page a purpose.
+
+---
+
+# 8. WAITING PAGE — DO NOT MAKE IT A SPINNER
+
+Do NOT make the entire waiting page:
+
+large spinner
++
+"Waiting..."
+
+That is too generic.
+
+The waiting page should have useful information.
+
+Possible layout:
+
+ROOM 7H2K
+
+WAITING FOR EVERYONE
+
+2 PEOPLE HERE
+
+[ participant presence ]
+
+Share this room:
+
+[ room link / copy ]
+
+[ Leave room ]
+
+Keep controls minimal.
+
+---
+
+# 9. WAITING PAGE — REAL-TIME STATES
+
+The page should respond to actual state.
+
+When a participant joins:
+
+Update participant presence.
+
+When enough participants are ready:
+
+Show the appropriate next state.
+
+When the room becomes live:
+
+Transition naturally into the Live Room.
+
+Do not use fake animation to imply that something happened if the backend state did not change.
+
+---
+
+# 10. LIVE ROOM — HIGHEST PRIORITY
+
+The Live Room needs a serious redesign.
+
+The current caption UI is visually broken.
+
+Specifically:
+
+### CURRENT PROBLEM 1
+
+The speaker's name and their caption have WAY too much white space between them.
+
+Fix this.
+
+Speaker identity and their caption should feel like ONE unit.
+
+Example:
+
+PRIYA
+
+We should probably test this
+before we deploy it.
+
+The name should be visually close to the caption.
+
+Do not create a huge vertical gap.
+
+---
+
+# 11. LIVE ROOM — SPEAKER/CAPTION CONTAINER
+
+Each speaker's caption should have a clear visual container/grouping.
+
+This is REQUIRED.
+
+The user specifically needs to distinguish one speaker's caption from another speaker's caption.
+
+Do NOT simply place:
+
+speaker name
+
+caption
+
+speaker name
+
+caption
+
+on a completely blank page.
+
+Create a subtle container system.
+
+Possible approaches:
+
+### OPTION A — Editorial caption blocks
+
+-----------------------------------------
+PRIYA
+
+We should probably test this
+before we deploy it.
+-----------------------------------------
+
+-----------------------------------------
+RAHUL
+
+Yeah, let's try it with a smaller group.
+-----------------------------------------
+
+### OPTION B — Speaker rail
+
+PRIYA   |  We should probably test this
+        |  before we deploy it.
+
+RAHUL   |  Yeah, let's try it with
+        |  a smaller group.
+
+### OPTION C — Timeline blocks
+
+A subtle left speaker marker
++
+speaker name
++
+caption
++
+timestamp
+
+Choose whichever looks best.
+
+Do NOT blindly implement these examples.
+
+Create a polished Roundtable-specific solution.
+
+---
+
+# 12. CAPTION CONTAINERS MUST NOT LOOK LIKE CHAT BUBBLES
+
+Important.
+
+We need separation.
+
+But do NOT turn every caption into a WhatsApp/Discord message bubble.
+
+The visual should feel like:
+
+LIVE TRANSCRIPT
+
+not:
+
+CHAT.
+
+Use:
+
+- subtle background shifts
+- thin borders
+- speaker markers
+- spacing
+- vertical rails
+- accent lines
+- typography
+
+to distinguish speakers.
+
+Keep the containers relatively open and editorial.
+
+---
+
+# 13. CURRENT SPEAKER SHOULD BE SPECIAL
+
+The person who is currently speaking should have a stronger visual state.
+
+For example:
+
+- accent line
+- active speaker marker
+- subtle background
+- stronger name
+- subtle voice activity indicator
+
+Do NOT use:
+
+- neon glow
+- huge pulsing ring
+- rainbow effect
+- generic AI orb
+
+The active state should be elegant.
+
+---
+
+# 14. LIVE CAPTION HIERARCHY
+
+The caption text itself should be the most important content.
+
+Hierarchy:
+
+1. Caption text
+2. Speaker name
+3. Timestamp / metadata
+
+NOT:
+
+1. giant speaker card
+2. huge avatar
+3. tiny caption
+
+The words are the product.
+
+Make them easy to read from a glance.
+
+---
+
+# 15. FIX THE EXCESSIVE WHITE SPACE
+
+Do a complete audit of the Live Room.
+
+Look for:
+
+- excessive top padding
+- excessive bottom padding
+- huge gaps between speaker and caption
+- huge gaps between caption blocks
+- empty side columns
+- oversized empty cards
+- unnecessary wrapper containers
+
+Use the available viewport intelligently.
+
+Desktop should feel balanced.
+
+Do NOT simply make everything smaller.
+
+Instead create a clear visual composition.
+
+Possible structure:
+
+---------------------------------------------------------
+TOP BAR
+Room name       participants        connection
+---------------------------------------------------------
+
+                    LIVE
+
+        PRIYA
+        We should probably test this
+        before we deploy it.
+
+        ---------------------------------
+
+        RAHUL
+        Yeah, let's try it with
+        a smaller group.
+
+---------------------------------------------------------
+participant presence / controls
+---------------------------------------------------------
+
+The actual implementation can differ.
+
+The key is:
+
+NO GIANT EMPTY GAPS.
+
+---
+
+# 16. LIVE ROOM — 3-DOT LOADER BUG
+
+There is currently a serious UI issue:
+
+The three-dot loading indicator appears:
+
+- twice
+- sometimes three times
+- in multiple locations on the Live Room
+
+This MUST be fixed.
+
+Do NOT simply hide it with CSS.
+
+Find the actual cause.
+
+Investigate:
+
+- duplicate loader components
+- duplicate loading state
+- multiple renders
+- nested loading indicators
+- caption loading state
+- microphone loading state
+- connection loading state
+- parent + child loading UI
+- duplicated conditional rendering
+- repeated state subscriptions
+
+There should be a clear rule for when the three-dot indicator appears.
+
+---
+
+# 17. THREE-DOT LOADER — SINGLE SOURCE OF TRUTH
+
+There should NOT be multiple independent three-dot loading indicators representing the same state.
+
+Determine what the loader actually means.
+
+Possible meanings:
+
+- waiting for caption
+- connecting
+- processing
+- listening
+
+Choose the correct user-facing meaning based on the existing functionality.
+
+Then make the UI show ONE appropriate indicator.
+
+If the application does not need a loader:
+
+remove it.
+
+Do not display a loader just because some state is temporarily undefined.
+
+---
+
+# 18. MUTE BUTTON — CRITICAL BUG
+
+Current issue:
+
+When the user presses the MUTE button:
+
+the three-dot loader still appears.
+
+This is WRONG.
+
+Mute/unmute is a direct control.
+
+It should NOT trigger a generic loading state unless the underlying implementation genuinely requires asynchronous processing.
+
+Investigate the state flow:
+
+Mute button
+→ microphone state
+→ audio capture state
+→ UI state
+→ loading state
+
+Find why mute causes the three-dot loader.
+
+Fix the root cause.
 
 Expected behavior:
 
-START
-→ CONTINUOUS CAPTURE
-→ EXPECTED COMPLETION
-→ STOP
-→ CLEANUP
+### UNMUTED
 
-============================================================
-# 10. REAL AUDIO → BACKEND
-============================================================
+Microphone active.
 
-Verify that the actual audio frames generated by the browser are transmitted to:
+### CLICK MUTE
 
-ws://localhost:8000/ws/{session_id}
+Microphone becomes muted.
 
-Verify backend receives them.
+Button immediately reflects:
 
-Verify:
+Muted
 
-- frame type
+No unrelated loader.
+
+### CLICK UNMUTE
+
+Microphone becomes active again.
+
+No unrelated loader.
+
+Do not make the entire caption area enter a loading state when mute changes.
+
+---
+
+# 19. SEPARATE UI STATES
+
+Do not use one generic `loading` state for unrelated operations.
+
+If the code currently does something like:
+
+loading = true
+
+for:
+
+- microphone
+- connection
+- caption
+- participant
+- room state
+
+separate these states where necessary.
+
+Possible conceptual states:
+
+isConnecting
+isMicStarting
+isCaptionProcessing
+isJoining
+
+But do not create unnecessary state variables if existing state can be modeled cleanly.
+
+The important requirement:
+
+A microphone mute action must not accidentally activate the caption loader.
+
+---
+
+# 20. LIVE ROOM HEADER
+
+Keep the header compact.
+
+Possible:
+
+ROUNDTABLE
+
+Room Name
+
+● Connected
+
+5 people
+
+Do not expose:
+
+- WebSocket
+- ASR
+- VAD
+- model
+- pipeline
+- latency
+- device ID
 - protocol version
-- device index
-- sequence number
-- capture timestamp
-- sample count
-- PCM payload
 
-Check payload length.
+Those are developer concerns.
 
-Check binary decoding.
+---
 
-Check malformed-frame handling.
+# 21. PARTICIPANTS IN LIVE ROOM
 
-============================================================
-# 11. REAL BACKEND → REAL ML
-============================================================
+Create a compact participant presence component.
 
-This is one of the most important tests.
+Example:
 
-Verify:
+● Jemish
+● Priya
+○ Rahul
+○ Aarav
 
-Frontend
-→ WebSocket
-→ FastAPI
-→ Session
-→ RealPipeline
-→ ML model
+Active speaker should be visually distinguishable.
 
-Inspect:
+Do not use giant participant cards.
 
-- pipeline initialization
-- pipeline selection
-- model initialization
-- model loading
-- model path
-- ML dependencies
-- audio queue
-- worker task
-- pipeline input
-- pipeline output
+Do not waste half the screen on avatars.
 
-The backend MUST NOT silently fall back to MockPipeline.
+The captions remain the priority.
 
-If RealPipeline fails:
+---
 
-surface the actual exception.
+# 22. LIVE ROOM CONTROLS
 
-Fix the actual integration issue.
+Keep controls compact and intentional.
 
-============================================================
-# 12. REAL MODEL INITIALIZATION
-============================================================
+Likely:
 
-Verify that the actual model is available.
+Microphone
 
-The README indicates the real setup uses:
+Participants
 
-    uv sync --extra dev --extra ml
-    uv run python scripts/download_models.py
+Leave
 
-If model files are missing:
+Potentially:
 
-identify that clearly.
+Caption settings
 
-Do not fake successful model initialization.
+ONLY if actually implemented and useful.
 
-If the environment cannot download/use the model, distinguish:
+Do not create a huge toolbar.
 
-CODE BUG
+Do not put five unrelated buttons at the bottom.
+
+---
+
+# 23. CAPTION SCROLLING
+
+The caption area should behave like a real live transcript.
+
+Requirements:
+
+- newest caption visible
+- previous captions remain readable
+- automatic scroll when appropriate
+- user can inspect recent history
+- no jumping layout
+- no duplicated lines
+- revisions update existing captions
+- speaker grouping remains intact
+
+Do not make every caption independently animated.
+
+Use subtle transitions.
+
+---
+
+# 24. DRAFT / FINAL CAPTIONS
+
+Do not expose technical terminology like:
+
+DRAFT
+FINAL
+ASR
+VAD
+
+Instead visually distinguish:
+
+current speech
 
 from:
 
-ENVIRONMENT / MODEL AVAILABILITY ISSUE
+confirmed speech.
 
-============================================================
-# 13. ASR TEST
-============================================================
+For example:
 
-Use actual microphone speech.
+Current speech:
+slightly lighter
 
-Say a clear sentence.
+Confirmed:
+normal/high contrast
 
-Verify:
+Older:
+slightly quieter
 
-audio arrives
-→ ML receives it
-→ ASR processes it
-→ caption is produced
+Do not make this distinction so subtle that users cannot read the current caption.
 
-Do not hardcode expected caption output.
+---
 
-The test should use actual speech.
+# 25. LIVE ROOM EMPTY STATE
 
-Check:
+Before anyone speaks:
 
-- transcription appears
-- latency
-- partial/draft output if implemented
-- final output
-- revisions
-- speaker information
+Do not show multiple loaders.
 
-============================================================
-# 14. CAPTION FLOW
-============================================================
+Do not show a giant empty page.
 
-Verify:
+Use a purposeful state:
 
-SPEECH
-→ DRAFT
-→ REVISION / FINAL
-→ FRONTEND
+LISTENING FOR THE CONVERSATION
 
-Check:
+Speak naturally and the conversation will appear here.
 
-- stable line ID
-- revision number
-- timestamp
-- speaker
-- text
-- ordering
+Then show a subtle Roundtable visual.
 
-A revision should update the existing caption rather than create an unnecessary duplicate.
+When speech begins:
 
-============================================================
-# 15. FRONTEND CAPTION RENDERING
-============================================================
+transition into the caption stream.
 
-Verify the real caption event reaches the frontend.
+---
 
-Check:
+# 26. LIVE ROOM RESPONSIVE DESIGN
 
-- new captions appear
-- draft updates
-- final replacement works
-- speaker information works
-- captions remain readable
-- scrolling works
-- newest caption is visible
-- older captions remain available
-- no duplicate caption lines
-- no flicker
+Desktop:
 
-============================================================
-# 16. SESSION / JOIN FLOW
-============================================================
+Use the wide viewport.
 
-Test the actual user journey:
+Possible layout:
 
-1. Open app.
-2. Create meeting/session.
-3. Enter name.
-4. Allow microphone.
-5. Complete microphone/enrollment flow.
-6. Enter meeting.
-7. Verify session connection.
-8. Verify participant registration.
-9. Start speaking.
-10. Verify real captions.
+caption area:
+~65–75%
 
-Do not bypass any step.
+participant/control area:
+~25–35%
 
-============================================================
-# 17. MULTI-DEVICE REAL TEST
-============================================================
+But do not rigidly follow those numbers.
 
-The product is specifically designed for multiple nearby devices.
+Mobile:
 
-Do not use the removed fake client.
+Caption area should dominate.
 
-Instead test with real browser/device instances.
+Participants can become a compact horizontal strip or expandable section.
 
-If possible:
+Controls should remain reachable.
 
-Device A:
-Laptop/browser
+No horizontal scrolling.
 
-Device B:
-Phone/browser
+No tiny caption text.
 
-Device C:
-Second phone/browser
+No excessive vertical gaps.
 
-All should join the same meeting.
+---
 
-Test:
+# 27. ACCESSIBILITY
 
-A speaks.
+This product is fundamentally about accessible conversation.
 
-Then:
+Therefore:
 
-B speaks.
+- caption contrast must be excellent
+- text must be readable
+- speaker distinction must not rely only on color
+- touch targets must be large enough
+- keyboard focus must be visible
+- screen readers should understand speaker + caption relationships
+- reduced motion should be respected
 
-Then:
+Do not sacrifice caption readability for visual effects.
 
-C speaks.
+---
 
-Verify:
+# 28. NO TECHNICAL JARGON
 
-- each participant is represented correctly
-- audio is received
-- captions are generated
-- speaker changes are reflected
-- all connected participants receive captions
-- one participant leaving does not kill the meeting
-
-If physical devices are unavailable in the current environment:
-
-test multiple real browser sessions where possible.
-
-Clearly document what was physically verified and what was not.
-
-============================================================
-# 18. SESSION ISOLATION
-============================================================
-
-Create two real sessions.
-
-Session A:
-real participants
-
-Session B:
-different real participants
-
-Verify:
-
-Session A does not receive:
-
-- captions from B
-- participant state from B
-- audio from B
-
-and vice versa.
-
-============================================================
-# 19. WEBSOCKET ROBUSTNESS
-============================================================
-
-Test:
-
-- normal connection
-- connection failure
-- disconnect
-- reconnect
-- malformed message
-- invalid JSON
-- invalid protocol version
-- invalid binary frame
-- duplicate sequence number
-- missing sequence number
-
-The server must remain alive.
-
-One broken client must not crash the whole server.
-
-============================================================
-# 20. RECONNECT / RESUME
-============================================================
-
-Test:
-
-connected client
-↓
-network interruption
-↓
-disconnect
-↓
-reconnect
-↓
-resume
-↓
-caption stream continues
-
-Verify:
-
-- no duplicate participant
-- no duplicate captions
-- no corrupted state
-- missing state is recovered where supported
-
-============================================================
-# 21. CLOCK SYNCHRONIZATION
-============================================================
-
-Verify the existing clock synchronization implementation.
-
-Test:
-
-- initial offset
-- positive offset
-- negative offset
-- timestamp normalization
-- ordering
-
-Make sure different device clocks do not corrupt conversation ordering.
-
-============================================================
-# 22. ASYNC / ML PERFORMANCE
-============================================================
-
-Ensure real ML inference does not block FastAPI's event loop.
-
-Inspect:
-
-- ASR
-- VAD
-- speaker processing
-- beamforming
-- CPU-heavy work
-
-If synchronous work blocks asyncio:
-
-move it to the project's appropriate worker/executor architecture.
-
-Do not rewrite the whole ML pipeline.
-
-============================================================
-# 23. BACKPRESSURE
-============================================================
-
-Test slow ML processing.
-
-Verify:
-
-- queues are bounded
-- memory does not grow indefinitely
-- clients do not freeze
-- server remains responsive
-
-Fix unbounded queues or accidental blocking.
-
-============================================================
-# 24. CLEANUP
-============================================================
-
-Test:
-
-- leave meeting
-- close browser
-- WebSocket disconnect
-- server shutdown
-- reconnect
-
-Verify:
-
-- audio capture stops
-- AudioContext is cleaned up
-- WebSocket closes
-- session state cleans up
-- pipeline worker stops
-- asyncio tasks are cancelled
-- no orphan tasks
-- no resource leaks
-
-============================================================
-# 25. ERROR STATES
-============================================================
-
-Test:
-
-- microphone denied
-- microphone unavailable
-- backend unavailable
-- ML model unavailable
-- invalid meeting
-- WebSocket disconnect
-- network interruption
-
-The application must give the user understandable errors.
-
-Do not show technical jargon such as:
+User-facing UI should not contain:
 
 WebSocket
 ASR
@@ -756,370 +1005,513 @@ VAD
 pipeline
 PCM
 inference
+model
+audio frames
+backend
+device index
+speaker attribution
 
-unless it is developer-only logging.
+Use:
 
-============================================================
-# 26. PREVIOUS FRONTEND RUNTIME ERROR
-============================================================
+Listening
+Speaking
+Connected
+Your microphone
+People
+Captions
+Reconnecting
 
-Check whether this error still occurs:
+etc.
 
-"Cannot manually set color scheme, as dark mode is type 'media'. Please use StyleSheet.setFlag('darkMode', 'class')"
+---
 
-If it exists:
+# 29. NO FAKE CONTENT
 
-find the actual cause.
+Do not introduce:
 
-Fix it correctly.
+- fake participants
+- fake captions
+- fake meetings
+- fake loading states
+- fake activity
 
-Do not simply suppress it.
+Use real application state.
 
-Verify the fix on web.
+For empty states, show a proper empty-state design.
 
-============================================================
-# 27. PROTOCOL INTEGRATION
-============================================================
+---
 
-Compare:
+# 30. PRESERVE FUNCTIONALITY
 
-packages/protocol
+Do NOT break:
 
-with:
+- room creation
+- joining
+- waiting state
+- microphone capture
+- mute/unmute
+- voice enrollment
+- WebSocket connection
+- real ML pipeline
+- real ASR
+- speaker identification
+- caption updates
+- reconnect
+- leaving the room
 
-frontend networking
+This is primarily a frontend/UI/UX fix.
 
-and:
+Only change underlying logic when necessary to fix an actual bug such as the duplicate loader or incorrect mute/loading state.
 
-server protocol handling.
+---
 
-Verify:
+# 31. COMPONENT RESTRUCTURE
 
-- protocol version
-- join
-- registration
-- audio
-- caption
-- resume
-- roster
-- errors
-- clock synchronization
+Create or redesign components where useful.
 
-Do not introduce protocol drift.
+Potential components:
 
-If a protocol change is absolutely necessary:
+CreateRoomLayout
+RoomCreationPanel
+ConversationPreview
+WaitingRoomLayout
+RoomPresence
+RoomShare
+WaitingVisual
+LiveRoomLayout
+LiveRoomHeader
+CaptionStream
+CaptionBlock
+SpeakerCaption
+ActiveSpeaker
+ParticipantPresence
+VoiceActivityIndicator
+MeetingControls
+ConnectionStatus
+CaptionEmptyState
 
-update all implementations and tests together.
+These are suggestions.
 
-============================================================
-# 28. MERGED-CODE AUDIT
-============================================================
+Use the project's existing architecture and naming conventions where appropriate.
 
-Because everything was recently merged, look specifically for:
+Do not create unnecessary abstractions.
 
-- duplicate implementations
-- stale imports
-- old branch assumptions
-- partially merged files
-- duplicated handlers
-- old UI logic
-- dead mock/fake references
-- inconsistent naming
-- commented-out production logic
-- conflicting environment variables
-- TODOs that are now blocking real functionality
+---
 
-Do NOT restore removed fake-client infrastructure just because an old test references it.
+# 32. IMPORTANT — THE LIVE ROOM CAPTION COMPONENT
 
-Update/remove stale tests that depend on intentionally removed functionality.
+This component deserves special attention.
 
-============================================================
-# 29. TESTS MUST REFLECT THE NEW ARCHITECTURE
-============================================================
+It should have a clean conceptual structure:
 
-If existing tests expect:
+CaptionStream
+    ├── CaptionBlock
+    │      ├── SpeakerIdentity
+    │      ├── CaptionText
+    │      └── Timestamp
+    │
+    ├── CaptionBlock
+    │      ├── SpeakerIdentity
+    │      ├── CaptionText
+    │      └── Timestamp
+    │
+    └── CaptionBlock
+           ├── SpeakerIdentity
+           ├── CaptionText
+           └── Timestamp
 
-- fake client
-- MockPipeline
-- synthetic captions
-- mock participants
+Do not necessarily use these exact component names.
 
-and those things were intentionally removed:
+But the visual relationship should be:
 
-do NOT reintroduce them just to satisfy the old test.
+SPEAKER
++
+THEIR WORDS
 
-Instead:
+as one cohesive unit.
 
-update the test to match the current real architecture.
+There should be clear separation between different speakers.
 
-Where full real-ML testing is impossible in CI:
+There should NOT be a giant blank gap between speaker name and caption.
 
-test the appropriate real integration boundaries without pretending that fake output is real output.
+---
 
-The production path must remain real.
-
-============================================================
-# 30. NO CHEATING
-============================================================
-
-DO NOT:
+# 33. LOADER ARCHITECTURE AUDIT
 
-- hardcode captions
-- hardcode participants
-- bypass microphone capture
-- bypass WebSocket
-- call caption handlers directly to simulate success
-- inject fake speech
-- silently switch to MockPipeline
-- weaken validation
-- disable tests
-- comment out failing tests
-- suppress exceptions
-- fake model initialization
-- claim success without testing the real path
+Search the entire Live Room implementation for:
 
-============================================================
-# 31. FIX LOOP
-============================================================
+- Loader
+- Loading
+- loading
+- isLoading
+- pending
+- processing
+- waiting
+- dots
+- animated dots
 
-For every issue:
+Determine every place where the three-dot loader is rendered.
 
-STEP 1:
-Reproduce.
+Create a small map:
 
-STEP 2:
-Find the exact failing component.
+Component → Why loader exists → What state triggers it
 
-STEP 3:
-Trace the data/state transition.
+Then remove duplicate/redundant loaders.
 
-STEP 4:
-Identify root cause.
+The final Live Room should have at most one intentional caption/processing indicator in the relevant location.
 
-STEP 5:
-Implement the smallest robust fix.
+If the indicator is not necessary, remove it.
 
-STEP 6:
-Run the relevant regression test.
+---
 
-STEP 7:
-Run the full test suite.
+# 34. MUTE STATE AUDIT
 
-STEP 8:
-Run the real user flow again.
+Search for all code related to:
 
-Do not stop after the first fix.
+- mute
+- unmute
+- microphone
+- audio enabled
+- audio disabled
+- loading
+- pending
 
-============================================================
-# 32. FINAL ACCEPTANCE TEST
-============================================================
+Trace the exact state change when clicking mute.
 
-The following exact flow must work:
+Verify that:
 
-1. Start backend.
-2. Start frontend.
-3. Open browser.
-4. Create a real session.
-5. Enter user name.
-6. Grant microphone permission.
-7. Record/enroll real voice.
-8. Verify real non-empty audio.
-9. Enter meeting.
-10. Verify real WebSocket connection.
-11. Verify backend receives real audio.
-12. Verify RealPipeline receives audio.
-13. Verify real model processes audio.
-14. Speak naturally.
-15. Verify real caption is generated.
-16. Verify caption appears in frontend.
-17. Join a second real device/browser.
-18. Speak from second device.
-19. Verify second speaker is reflected.
-20. Verify captions reach both clients.
-21. Disconnect one client.
-22. Verify meeting continues.
-23. Reconnect.
-24. Verify session recovery.
-25. Leave.
-26. Verify cleanup.
+mute → mic disabled
 
-THIS is the primary acceptance test.
+and NOT:
 
-============================================================
-# 33. FINAL CHECKLIST
-============================================================
+mute → generic loading state
 
-[ ] `just test` passes
+If a shared state is causing the bug:
 
-[ ] TypeScript checks pass
+refactor the state relationship.
 
-[ ] Python tests pass
+Do not patch it with:
 
-[ ] Protocol tests pass
+display: none
 
-[ ] Backend starts
+or:
 
-[ ] Frontend starts
+opacity: 0
 
-[ ] /health works
+The state logic must be correct.
 
-[ ] Browser has no fatal runtime errors
+---
 
-[ ] Microphone permission works
+# 35. BROWSER TESTING
 
-[ ] Real microphone captures audio
+Actually run the application.
 
-[ ] Audio is non-empty
+Open:
 
-[ ] Audio is mono
+Create Room
+Waiting Room
+Live Room
 
-[ ] Audio is 16 kHz
+Test:
 
-[ ] Audio is PCM16
+### CREATE ROOM
 
-[ ] Frames follow protocol
+- desktop
+- mobile
+- create room
+- validation
+- button state
 
-[ ] WebSocket receives audio
+### WAITING
 
-[ ] Backend receives audio
+- participant appears
+- participant leaves
+- room information
+- transition to live
 
-[ ] RealPipeline receives audio
+### LIVE
 
-[ ] Real model initializes
+- microphone starts
+- mute
+- unmute
+- captions
+- speaker changes
+- multiple speakers
+- caption scrolling
+- connection state
+- leave
 
-[ ] Real ASR processes speech
+Do not stop after checking the source code.
 
-[ ] Real caption is produced
+Visually inspect the browser.
 
-[ ] Caption reaches frontend
+---
 
-[ ] Speaker information works
+# 36. SPECIFIC LIVE ROOM TEST SCENARIO
 
-[ ] Multiple real clients work
+Perform this exact sequence:
 
-[ ] Sessions are isolated
+1. Enter a room.
+2. Wait for Live Room.
+3. Verify there is NOT more than one three-dot loader.
+4. Verify there is no unnecessary loader before speech.
+5. Speak.
+6. Verify caption appears.
+7. Verify speaker name is close to caption.
+8. Verify caption is inside a clear speaker grouping/container.
+9. Have another speaker speak.
+10. Verify their caption is visually separated.
+11. Return to first speaker.
+12. Verify the grouping remains clear.
+13. Press Mute.
+14. Verify microphone becomes muted.
+15. Verify NO three-dot loader appears because of mute.
+16. Press Unmute.
+17. Verify microphone becomes active.
+18. Verify NO unrelated loader appears.
+19. Continue speaking.
+20. Verify captions continue normally.
+21. Leave room.
+22. Verify cleanup.
 
-[ ] Disconnect works
+This sequence is mandatory.
 
-[ ] Reconnect works
+---
 
-[ ] Cleanup works
+# 37. VISUAL QUALITY TEST
 
-[ ] No fake users
+After implementation, take a hard look at the pages.
 
-[ ] No fake captions
+Ask:
 
-[ ] No MockPipeline in production
+### Create Room
 
-[ ] No fake-client dependency
+Does it feel like a complete product screen?
 
-[ ] No stale tests requiring removed fake infrastructure
+Or is it just a form floating in a huge empty page?
 
-[ ] No merge artifacts
+### Waiting Room
 
-[ ] No critical runtime errors
+Does it communicate the room state?
 
-============================================================
-# 34. FINAL REPORT
-============================================================
+Or is it just a spinner?
 
-Return:
+### Live Room
 
-## Overall Result
+Does it feel like a professional live-caption product?
 
-PASS / PASS WITH LIMITATIONS / FAIL
+Or does it look like text dumped into a page?
 
-## Real End-to-End Path
+### Caption
 
-Microphone
-→ WebSocket
-→ FastAPI
-→ Session
-→ RealPipeline
-→ Real ML
-→ ASR
-→ Caption
-→ Frontend
+Can I immediately tell:
 
-Mark each:
+WHO is speaking?
 
-PASS / FAIL / PARTIAL
+WHAT they said?
 
-## Bugs Found
+WHERE one speaker's text ends?
 
-For each:
+WHEN another speaker starts?
 
-- symptom
-- root cause
-- fix
-- verification
+If not:
 
-## Files Changed
+REDESIGN THE CAPTION COMPONENT.
 
-List files and purpose.
+---
 
-## Tests Run
+# 38. DO NOT OVERDESIGN
 
-List commands.
+Do NOT add:
 
-## Real Device Testing
+- giant gradients
+- neon effects
+- AI sparkles
+- excessive animations
+- decorative blobs
+- generic AI illustrations
+- excessive cards
+- unnecessary statistics
 
-Clearly state what was actually tested on:
+Keep the existing Roundtable visual identity.
 
-- browser
-- laptop
-- phone
-- multiple devices
+The improvement should come from:
 
-Do not claim physical-device testing if it was not performed.
+- composition
+- typography
+- spacing
+- hierarchy
+- useful components
+- caption clarity
+- interaction quality
+
+---
+
+# 39. FINAL ACCEPTANCE CHECKLIST
+
+## Create Room
+
+[ ] Uses available viewport intelligently
+
+[ ] No excessive empty white space
+
+[ ] Clear hierarchy
+
+[ ] Form is easy to use
+
+[ ] Meaningful supporting visual/content
+
+[ ] Responsive
+
+[ ] Existing theme preserved
+
+## Waiting Room
+
+[ ] Clear waiting state
+
+[ ] Participant presence visible
+
+[ ] Room information visible
+
+[ ] Useful sharing/join information where appropriate
+
+[ ] No giant empty area
+
+[ ] No generic full-page spinner
+
+[ ] Responsive
+
+## Live Room
+
+[ ] Caption is the visual priority
+
+[ ] Speaker name is close to caption
+
+[ ] Speaker + caption form one cohesive unit
+
+[ ] Different speakers are visually separated
+
+[ ] Caption containers are clear
+
+[ ] Caption containers do not look like chat bubbles
+
+[ ] Active speaker is clearly indicated
+
+[ ] Caption text is highly readable
+
+[ ] No excessive whitespace between caption elements
+
+[ ] No duplicate three-dot loaders
+
+[ ] No unnecessary three-dot loader
+
+[ ] Mute does NOT trigger the loader
+
+[ ] Unmute does NOT trigger the loader
+
+[ ] Microphone state is accurate
+
+[ ] Captions continue after mute/unmute
+
+[ ] Scrolling works
+
+[ ] Multiple speakers work
+
+[ ] Responsive
+
+[ ] Accessible
+
+[ ] No technical jargon
+
+---
+
+# 40. FINAL REPORT
+
+After implementation, provide:
+
+## Pages Redesigned
+
+- Create Room
+- Waiting Room
+- Live Room
+
+## Components Changed
+
+List the important components.
+
+## Components Added
+
+List new product-specific components.
+
+## Caption Fix
+
+Explain:
+
+- what caused the excessive speaker/caption spacing
+- how speaker grouping was redesigned
+- how different speakers are visually separated
+
+## Loader Fix
+
+Explain:
+
+- why the three-dot loader appeared multiple times
+- which duplicate/redundant render paths were removed
+- why mute was incorrectly triggering it
+- how the state logic was corrected
+
+## Responsive Improvements
+
+Summarize desktop/mobile changes.
+
+## Tests Performed
+
+List the actual browser tests.
 
 ## Remaining Issues
 
-Separate:
+Be honest.
 
-- actual code bugs
-- environment limitations
-- model/dependency limitations
-- physical-device limitations
+Do not claim something was tested if it was not.
 
-## Final Recommendation
+---
 
-READY FOR DEMO
+# FINAL INSTRUCTION
 
-or
+DO NOT JUST MAKE THESE THREE PAGES "PRETTIER."
 
-NOT READY FOR DEMO
+REDESIGN THEIR COMPOSITION.
 
-Do not claim READY FOR DEMO unless the real microphone → backend → real ML → caption path has actually been verified.
+Use the available screen space intelligently.
 
-============================================================
-# MOST IMPORTANT
-============================================================
+Most importantly:
 
-THE FAKE CLIENT HAS BEEN REMOVED.
+FIX THE LIVE ROOM.
 
-DO NOT BRING IT BACK.
+The Live Room must make it immediately obvious:
 
-THE MOCK PIPELINE HAS BEEN REMOVED FROM THE USER FLOW.
+WHO IS SPEAKING
++
+WHAT THEY ARE SAYING
++
+WHICH CAPTION BELONGS TO WHICH SPEAKER
 
-DO NOT BRING IT BACK.
+There must be a clear visual grouping between each speaker's identity and their words.
 
-THE ONLY REAL ACCEPTANCE PATH IS:
+There must NOT be huge whitespace between speaker name and caption.
 
-REAL USER
-→ REAL MICROPHONE
-→ REAL AUDIO
-→ REAL WEBSOCKET
-→ REAL BACKEND
-→ REAL ML
-→ REAL ASR
-→ REAL CAPTION
-→ REAL UI
+There must NOT be duplicate three-dot loaders.
 
-Test that path.
+Pressing MUTE must NOT cause the unrelated caption/processing loader to appear.
 
-Fix that path.
+The mute state must work independently from caption loading/processing state.
 
-Make that path reliable.
+Keep the existing Roundtable color theme.
 
-Do not fake success.
+Preserve real application functionality.
+
+Use real state.
+
+Do not introduce fake users or fake captions.
+
+Make these three pages feel like one cohesive, polished Roundtable product.

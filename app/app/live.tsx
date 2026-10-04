@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ConnectionBadge } from "../src/components/ConnectionBadge";
@@ -13,6 +13,8 @@ import { colors, radii } from "../src/theme";
 
 export default function LiveScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const compact = width < 560;
   const params = useLocalSearchParams<{ code?: string; name?: string }>();
   const {
     sessionCode,
@@ -51,16 +53,18 @@ export default function LiveScreen() {
       <Toast message={toastMessage} onDismiss={clearToast} />
 
       {/* Top Editorial Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, compact && styles.headerCompact]}>
         <View style={styles.roomInfo}>
-          <Text style={styles.roomBrandLabel}>ROUNDTABLE</Text>
-          <View style={styles.headerDivider} />
+          {!compact && <Text style={styles.roomBrandLabel}>ROUNDTABLE</Text>}
+          {!compact && <View style={styles.headerDivider} />}
           <Text style={styles.roomTitle} numberOfLines={1}>
             {sessionName || "Group Discussion"}
           </Text>
-          <View style={styles.codeTag}>
-            <Text style={styles.codeTagText}>{params.code || sessionCode}</Text>
-          </View>
+          {!compact && (
+            <View style={styles.codeTag}>
+              <Text style={styles.codeTagText}>{params.code || sessionCode}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.headerRight}>
@@ -107,7 +111,7 @@ export default function LiveScreen() {
           roster={roster}
           activeSpeakerId={activeSpeakerId}
           overlappingCount={overlappingCount}
-          micLevel={micLevel}
+          micLevel={isMuted ? 0 : micLevel}
         />
       </View>
 
@@ -139,7 +143,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgPrimary,
   },
   header: {
-    height: 56,
+    minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -153,6 +157,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  headerCompact: { paddingHorizontal: 12, gap: 8 },
   roomInfo: {
     flexDirection: "row",
     alignItems: "center",
@@ -175,7 +180,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: colors.textPrimary,
-    maxWidth: 220,
+    maxWidth: 360,
+    flexShrink: 1,
   },
   codeTag: {
     backgroundColor: colors.bgSecondary,
@@ -195,7 +201,7 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
   },
   leaveBtn: {
     paddingVertical: 6,
@@ -215,15 +221,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSecondary,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   participantScroll: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     gap: 8,
     alignItems: "center",
   },
   captionArea: {
     flex: 1,
     width: "100%",
+    alignSelf: "center",
+    maxWidth: 1220,
   },
 });

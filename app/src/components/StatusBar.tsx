@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radii } from "../theme";
@@ -25,10 +26,11 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   micLevel = 0,
   onToggleMute,
 }) => {
+  const compact = useWindowDimensions().width < 420;
   const voiceDetected = micLevel >= 0.025;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.containerCompact]}>
       {/* Mic toggle & Listening indicator */}
       <View style={styles.leftSection}>
         <TouchableOpacity
@@ -43,7 +45,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             color={isMuted ? colors.danger : colors.success}
           />
           <Text style={[styles.micBtnText, isMuted && styles.micTextMuted]}>
-            {isMuted ? "Microphone off" : "Mute"}
+            {isMuted ? (compact ? "Muted" : "Microphone off") : "Mute"}
           </Text>
         </TouchableOpacity>
 
@@ -105,6 +107,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
+  containerCompact: { paddingHorizontal: 12, height: 58 },
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
