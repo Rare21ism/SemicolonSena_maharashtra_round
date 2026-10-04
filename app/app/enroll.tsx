@@ -37,20 +37,12 @@ export default function VoiceEnrollmentScreen() {
   const playbackRef = useRef<HTMLAudioElement | null>(null);
   const playbackUrlRef = useRef<string | null>(null);
 
-  const nativeRecorderRef = useRef<any>(null);
-  const nativePlayerRef = useRef<any>(null);
-  const recordedUriRef = useRef<string | null>(null);
-
   useEffect(() => () => {
     recordingRef.current = false;
     sourceRef.current?.stop();
     clientRef.current?.disconnect();
     playbackRef.current?.pause();
     if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current);
-    try {
-      nativeRecorderRef.current?.stop?.();
-      nativePlayerRef.current?.release?.();
-    } catch {}
   }, []);
 
   const startRecording = async () => {
@@ -65,67 +57,6 @@ export default function VoiceEnrollmentScreen() {
     let effectiveUrl = (serverUrl || "").trim().replace(/\/+$/, "");
     if (!effectiveUrl || (Platform.OS !== "web" && (effectiveUrl.includes("localhost") || effectiveUrl.includes("127.0.0.1")))) {
       effectiveUrl = "http://192.168.1.3:8000";
-    }
-
-    if (Platform.OS !== "web") {
-      try {
-        const {
-          AudioModule,
-          RecordingPresets,
-          setAudioModeAsync,
-          requestRecordingPermissionsAsync,
-        } = await import("expo-audio");
-        const perm = await requestRecordingPermissionsAsync();
-        if (!perm.granted) {
-          throw new Error("Microphone permission is required.");
-        }
-        await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-
-        const recorder = new (AudioModule as any).AudioRecorder({
-          ...RecordingPresets.HIGH_QUALITY,
-          isMeteringEnabled: true,
-        });
-        nativeRecorderRef.current = recorder;
-        await recorder.prepareToRecordAsync();
-        recorder.record();
-
-        recordingRef.current = true;
-        setState("recording");
-
-        const meterInterval = setInterval(() => {
-          try {
-            const status = recorder.getStatus();
-            if (typeof status?.metering === "number") {
-              const normalized = Math.max(0, Math.min(1, (status.metering + 55) / 45));
-              setMicLevel(normalized);
-            }
-          } catch {}
-        }, 80);
-
-        const startedAt = performance.now();
-        while (performance.now() - startedAt < 5000) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          setCountdown(Math.max(0, Math.ceil(5 - (performance.now() - startedAt) / 1000)));
-        }
-
-        clearInterval(meterInterval);
-        recordingRef.current = false;
-        try {
-          await recorder.stop();
-          recordedUriRef.current = recorder.uri;
-        } catch {}
-
-        setCapturedFrameCount(50);
-        setVoiceEnrolled(true);
-        setState("captured");
-        return;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Microphone recording failed.";
-        setCaptureError(message);
-        setState("idle");
-        recordingRef.current = false;
-        return;
-      }
     }
 
     try {
@@ -204,23 +135,7 @@ export default function VoiceEnrollmentScreen() {
 
   const handlePlaySample = async () => {
     if (Platform.OS !== "web") {
-      const uri = recordedUriRef.current;
-      if (!uri) return;
-      try {
-        const { createAudioPlayer } = await import("expo-audio");
-        setIsPlaying(true);
-        const player = createAudioPlayer(uri);
-        nativePlayerRef.current = player;
-        (player as any).addListener?.("playbackStatusUpdate", (status: any) => {
-          if (status?.didJustFinish || !status?.playing) {
-            setIsPlaying(false);
-          }
-        });
-        player.play();
-      } catch (error) {
-        setIsPlaying(false);
-        setCaptureError(error instanceof Error ? error.message : "Could not play recorded sample.");
-      }
+      setCaptureError("Sample playback is available in the web app only.");
       return;
     }
     const frames = capturedAudioRef.current;
