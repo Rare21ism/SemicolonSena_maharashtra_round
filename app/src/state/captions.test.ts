@@ -10,6 +10,7 @@ test("caption replacement: draft rev1 -> draft rev2 -> final rev3 -> final rev4 
 
   // 1. Draft rev 1
   captions = updateCaptions(captions, {
+    type: "caption",
     line_id: lineId,
     rev: 1,
     speaker_id: 1,
@@ -25,6 +26,7 @@ test("caption replacement: draft rev1 -> draft rev2 -> final rev3 -> final rev4 
 
   // 2. Draft rev 2
   captions = updateCaptions(captions, {
+    type: "caption",
     line_id: lineId,
     rev: 2,
     speaker_id: 1,
@@ -40,6 +42,7 @@ test("caption replacement: draft rev1 -> draft rev2 -> final rev3 -> final rev4 
 
   // 3. Final rev 3 (Sherpa all-caps final)
   captions = updateCaptions(captions, {
+    type: "caption",
     line_id: lineId,
     rev: 3,
     speaker_id: 1,
@@ -55,6 +58,7 @@ test("caption replacement: draft rev1 -> draft rev2 -> final rev3 -> final rev4 
 
   // 4. Final rev 4 (Whisper-corrected mixed case final)
   captions = updateCaptions(captions, {
+    type: "caption",
     line_id: lineId,
     rev: 4,
     speaker_id: 1,
@@ -70,6 +74,7 @@ test("caption replacement: draft rev1 -> draft rev2 -> final rev3 -> final rev4 
 
   // Stale message arriving late (rev <= current.rev) must be ignored
   captions = updateCaptions(captions, {
+    type: "caption",
     line_id: lineId,
     rev: 3,
     speaker_id: 1,
@@ -85,6 +90,7 @@ test("caption replacement: draft rev1 -> draft rev2 -> final rev3 -> final rev4 
 test("empty-text finals must only remove a line if rev is higher than the stored one", () => {
   let captions: ExtendedCaptionMessage[] = [
     {
+      type: "caption",
       line_id: "line-cough-1",
       rev: 2,
       speaker_id: 0,
@@ -97,6 +103,7 @@ test("empty-text finals must only remove a line if rev is higher than the stored
 
   // A lower rev empty-text final must NOT remove the line
   captions = updateCaptions(captions, {
+    type: "caption",
     line_id: "line-cough-1",
     rev: 1,
     speaker_id: 0,
@@ -110,6 +117,7 @@ test("empty-text finals must only remove a line if rev is higher than the stored
 
   // A higher rev empty-text final MUST remove the line
   captions = updateCaptions(captions, {
+    type: "caption",
     line_id: "line-cough-1",
     rev: 3,
     speaker_id: 0,
@@ -122,6 +130,7 @@ test("empty-text finals must only remove a line if rev is higher than the stored
 
   // An empty-text final for a line that isn't stored must do nothing
   captions = updateCaptions(captions, {
+    type: "caption",
     line_id: "line-unknown",
     rev: 1,
     speaker_id: 0,

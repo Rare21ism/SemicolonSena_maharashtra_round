@@ -234,6 +234,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontWeight: "400",
   },
+  draftCaret: {
+    color: colors.warning,
+    fontSize: 14,
+  },
   draftPulse: {
     color: colors.primaryLight,
     fontWeight: "600",
