@@ -11,8 +11,18 @@ import Constants from "expo-constants";
 import { CaptionMessage, DeviceInfo } from "@roundtable/protocol";
 import { ExtendedCaptionMessage } from "../components/CaptionLine";
 import { ConnectionStatus, RoundtableClient } from "../net/ws";
-import { createAudioSource } from "../audio";
+import { AudioFormatInfo, createAudioSource } from "../audio";
 import { updateCaptions } from "./captions";
+
+export interface DebugOverlayInfo {
+  wsStatus: ConnectionStatus;
+  framesSentFps: number;
+  sampleRate: number;
+  sampleFormat: string;
+  firstThreeCaptureTs: number[];
+  clockOffsetMs: number;
+  micLevel: number;
+}
 
 const getDefaultServerUrl = (): string => {
   if (process.env.EXPO_PUBLIC_SERVER_URL) {
@@ -74,6 +84,7 @@ interface SessionContextType {
   evalOpen: boolean;
   setEvalOpen: (open: boolean) => void;
   recordedAudioUrl: string | null;
+  debugInfo: DebugOverlayInfo;
 }
 
 const SessionContext = createContext<SessionContextType | null>(null);
@@ -118,6 +129,35 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     myDeviceIdxRef.current = myDeviceIdx;
   }, [myDeviceIdx]);
+
+  const [framesSentFps, setFramesSentFps] = useState<number>(0);
+  const [firstThreeCaptureTs, setFirstThreeCaptureTs] = useState<number[]>([]);
+  const [audioFormat, setAudioFormat] = useState<AudioFormatInfo>({
+    sampleRate: 16000,
+    channels: 1,
+    bitDepth: 16,
+    byteOrder: "little-endian (LE)",
+    format: "pcm_s16le",
+  });
+  const firstThreeCaptureTsRef = useRef<number[]>([]);
+  const sentFramesRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = performance.now();
+      sentFramesRef.current = sentFramesRef.current.filter((t) => now - t <= 1000);
+      setFramesSentFps(sentFramesRef.current.length);
+      if (audioSourceRef.current?.getAudioFormat) {
+        try {
+          const fmt = audioSourceRef.current.getAudioFormat();
+          if (fmt) {
+            setAudioFormat(fmt);
+          }
+        } catch {}
+      }
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -223,6 +263,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         audioSourceRef.current = null;
       }
 
+      firstThreeCaptureTsRef.current = [];
+      setFirstThreeCaptureTs([]);
+      sentFramesRef.current = [];
+      setFramesSentFps(0);
+
       const effectiveUrl = getEffectiveServerUrl();
 
       const client = new RoundtableClient({
@@ -253,7 +298,17 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
       // Stream real 16 kHz PCM; caption recognition and speaker IDs come from the server pipeline.
       const audioSource = createAudioSource();
       audioSourceRef.current = audioSource;
+      if (audioSource.getAudioFormat) {
+        try {
+          const fmt = audioSource.getAudioFormat();
+          if (fmt) setAudioFormat(fmt);
+        } catch {}
+      }
       audioSource.onChunk((pcm, ts) => {
+        if (firstThreeCaptureTsRef.current.length < 3) {
+          firstThreeCaptureTsRef.current.push(Math.round(ts * 10) / 10);
+          setFirstThreeCaptureTs([...firstThreeCaptureTsRef.current]);
+        }
         let sumSquares = 0;
         for (let i = 0; i < pcm.length; i++) {
           const sample = pcm[i] / 32768;
@@ -265,6 +320,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         setMicQuality(level >= 0.12 ? "good" : level >= 0.025 ? "fair" : "poor");
         if (!isMutedRef.current) {
           client.sendAudioFrame(pcm, ts);
+          sentFramesRef.current.push(performance.now());
         }
       });
       audioSource.start().catch((e) => {
@@ -278,6 +334,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
   // Leave session
   const leaveSession = useCallback(() => {
     connectedCodeRef.current = null;
+    sentFramesRef.current = [];
+    setFramesSentFps(0);
     if (audioSourceRef.current) {
       audioSourceRef.current.stop();
       audioSourceRef.current = null;
@@ -346,6 +404,15 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         evalOpen,
         setEvalOpen,
         recordedAudioUrl,
+        debugInfo: {
+          wsStatus: status,
+          framesSentFps,
+          sampleRate: audioFormat.sampleRate,
+          sampleFormat: audioFormat.format,
+          firstThreeCaptureTs,
+          clockOffsetMs: offsetMs,
+          micLevel,
+        },
       }}
     >
       {children}

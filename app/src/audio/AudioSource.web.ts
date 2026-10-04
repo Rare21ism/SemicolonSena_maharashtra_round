@@ -218,6 +218,15 @@ export class WebAudioSource implements AudioSource {
     log('Capture stopped');
   }
 
+  getAudioFormat() {
+    return {
+      sampleRate: this._ctx?.sampleRate || 16000,
+      channels: 1,
+      bitDepth: 16,
+      byteOrder: "little-endian (LE)",
+      format: "pcm_s16le",
+    };
+  }
 }
 
 export const createAudioSource = (): AudioSource => new WebAudioSource();

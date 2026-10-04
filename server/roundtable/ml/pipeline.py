@@ -23,7 +23,7 @@ import uuid
 import wave
 import numpy as np
 
-from roundtable.ml.align import SessionAligner
+from roundtable.ml.align import ArrivalAligner, SessionAligner, TickData
 from roundtable.ml.engine import FinalASR, StreamingASR
 from roundtable.ml.gate import AudioGate, GateConfig
 from roundtable.ml.lane import CaptionEvent, Lane, PipelineLatencyStats, WhisperCorrectionQueue
@@ -247,12 +247,23 @@ class RealPipeline:
         draft_mode: Optional[str] = None,
         streaming_asr: Optional[StreamingASR] = None,
         final_asr: Optional[FinalASR] = None,
+        align_mode: Optional[str] = None,
     ):
         self._queue: asyncio.Queue[CaptionEvent] = asyncio.Queue()
         self._closed = False
         self._caption_history: dict[str, dict] = {}
         self._caption_snr: dict[int, deque[tuple[float, float]]] = {}
         self._dedup_similarity = float(os.getenv("DEDUP_SIM", "0.5"))
+
+        env_align = os.getenv("ALIGN_MODE")
+        if align_mode is not None:
+            self.align_mode = align_mode.strip().lower()
+        elif env_align is not None:
+            self.align_mode = env_align.strip().lower()
+        elif "PYTEST_CURRENT_TEST" in os.environ:
+            self.align_mode = "timestamp"
+        else:
+            self.align_mode = "arrival"
         self.enable_whisper = enable_whisper
         deepgram_key = os.getenv("DEEPGRAM_API_KEY")
         self.asr_backend = os.getenv("ASR_BACKEND", "deepgram" if deepgram_key else "local").lower()
@@ -345,12 +356,64 @@ class RealPipeline:
             self.whisper_queue = None
 
         self.lanes: dict[int, Lane] = {}
-        self.aligner = SessionAligner(hold_back_ms=self.gate_config.jitter_hold_back_ms)
         self.gate = AudioGate(config=self.gate_config)
         self._lock = asyncio.Lock()
         self._ml_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pipeline-ml")
         self.session_stream = SessionStream(deepgram_key, self._queue_caption) if self.asr_backend == "deepgram" and deepgram_key else None
         self._deepgram_fallback_ticks: deque[tuple[int, np.ndarray, float, float, bool]] = deque()
+        self.on_gate_tick: Optional[Callable] = None
+
+        if self.align_mode == "timestamp":
+            self.aligner = SessionAligner(hold_back_ms=self.gate_config.jitter_hold_back_ms)
+            self.arrival_aligner = None
+            self._ticker_task = None
+        else:
+            self.aligner = None
+            self.arrival_aligner = ArrivalAligner()
+            try:
+                loop = asyncio.get_running_loop()
+                self._ticker_task = loop.create_task(self._ticker_loop())
+            except RuntimeError:
+                self._ticker_task = None
+
+    async def _ticker_loop(self) -> None:
+        """Wall-clock ticker running every 100 ms for ALIGN_MODE=arrival."""
+        tick_interval = 0.1  # 100 ms
+        tick_idx = 0
+        session_start_mono = time.monotonic()
+        next_tick_mono = session_start_mono + tick_interval
+
+        while not self._closed:
+            try:
+                now = time.monotonic()
+                sleep_s = next_tick_mono - now
+                if sleep_s > 0:
+                    await asyncio.sleep(sleep_s)
+                else:
+                    await asyncio.sleep(0)
+                next_tick_mono += tick_interval
+
+                if self._closed or self.arrival_aligner is None:
+                    break
+
+                now_mono = time.monotonic()
+                tick_start_ms = (now_mono - session_start_mono) * 1000.0
+                tick_end_ms = tick_start_ms + 100.0
+
+                tick = self.arrival_aligner.extract_tick(
+                    now_mono=now_mono,
+                    tick_idx=tick_idx,
+                    t_start_ms=tick_start_ms,
+                    t_end_ms=tick_end_ms,
+                )
+                if tick is not None:
+                    tick_idx += 1
+                    await self._process_gated_tick(tick)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Error in pipeline wall-clock ticker loop")
+                await asyncio.sleep(0.05)
 
     async def _emit_caption(self, caption: CaptionMessage) -> None:
         if self._closed:
@@ -449,8 +512,76 @@ class RealPipeline:
                 gate_open_threshold_db=self.gate_config.threshold_open_db,
                 asr_backend=self.asr_backend,
             )
-            self.aligner.enroll_device(device_idx)
+            if self.aligner:
+                self.aligner.enroll_device(device_idx)
+            elif self.arrival_aligner:
+                self.arrival_aligner.enroll_device(device_idx)
         return self.lanes[device_idx]
+
+    def push_frame(
+        self,
+        device_idx: int,
+        seq: int,
+        capture_ts_ms: float,
+        pcm: np.ndarray,
+        arrival_mono: Optional[float] = None,
+    ) -> None:
+        """Pushes incoming frame synchronously into arrival aligner queue."""
+        if self._closed:
+            return
+        arrival_mono = arrival_mono if arrival_mono is not None else time.monotonic()
+        self._get_or_create_lane(device_idx)
+        if self.dump_dir:
+            self._raw_pcm_dumps.setdefault(device_idx, []).append(pcm.copy())
+            st = self._device_stats.setdefault(device_idx, {
+                "frames_received": 0,
+                "total_samples": 0,
+                "first_wall_s": time.perf_counter(),
+                "last_wall_s": time.perf_counter(),
+                "max_abs_sample": 0,
+            })
+            st["frames_received"] += 1
+            st["total_samples"] += len(pcm)
+            st["last_wall_s"] = time.perf_counter()
+            if len(pcm) > 0:
+                max_abs = int(np.max(np.abs(pcm)))
+                if max_abs > st["max_abs_sample"]:
+                    st["max_abs_sample"] = max_abs
+
+        if self.align_mode == "timestamp":
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.on_frame("", device_idx, seq, capture_ts_ms, pcm))
+            except RuntimeError:
+                pass
+        else:
+            if self._ticker_task is None or self._ticker_task.done():
+                try:
+                    loop = asyncio.get_running_loop()
+                    self._ticker_task = loop.create_task(self._ticker_loop())
+                except RuntimeError:
+                    pass
+            self.arrival_aligner.push_frame(
+                device_idx=device_idx,
+                pcm=pcm,
+                arrival_time=arrival_mono,
+                seq=seq,
+                capture_ts_ms=capture_ts_ms,
+            )
+
+    def remove_device(self, device_idx: int) -> None:
+        """Removes a disconnected device from the gate and arrival aligner immediately."""
+        if self.arrival_aligner:
+            self.arrival_aligner.remove_device(device_idx)
+        if self.gate:
+            self.gate.remove_device(device_idx)
+        if device_idx in self.lanes:
+            lane = self.lanes[device_idx]
+            if lane.has_active_utterance:
+                try:
+                    asyncio.create_task(lane.force_final())
+                except Exception:
+                    pass
 
     async def on_frame(
         self,
@@ -462,8 +593,7 @@ class RealPipeline:
     ) -> None:
         """
         Ingests an incoming audio frame from a client device.
-        When gating is enabled, feeds into SessionAligner and dispatches
-        synchronized gated ticks to lanes.
+        When gating is enabled, feeds into SessionAligner or ArrivalAligner.
         """
         if self._closed:
             return
@@ -494,21 +624,34 @@ class RealPipeline:
                 if max_abs > st["max_abs_sample"]:
                     st["max_abs_sample"] = max_abs
 
-            if not self.enable_gating:
-                # Direct feeding without gating (gating=off)
-                lane = self.lanes[device_idx]
-                if self.dump_dir:
-                    self._post_gate_pcm_dumps.setdefault(device_idx, []).append(pcm.copy())
-                await lane.feed(pcm, capture_ts_ms)
-                return
+            if self.align_mode == "timestamp":
+                if not self.enable_gating:
+                    # Direct feeding without gating (gating=off)
+                    lane = self.lanes[device_idx]
+                    if self.dump_dir:
+                        self._post_gate_pcm_dumps.setdefault(device_idx, []).append(pcm.copy())
+                    await lane.feed(pcm, capture_ts_ms)
+                    return
 
-            # Gating enabled: add frame to aligner and pop ready ticks
-            loop = asyncio.get_running_loop()
-            ready_ticks = await loop.run_in_executor(
-                self._ml_executor, self.aligner.add_frame, device_idx, capture_ts_ms, pcm
-            )
-            for tick in ready_ticks:
-                await self._process_gated_tick(tick)
+                # Gating enabled: add frame to aligner and pop ready ticks
+                loop = asyncio.get_running_loop()
+                ready_ticks = await loop.run_in_executor(
+                    self._ml_executor, self.aligner.add_frame, device_idx, capture_ts_ms, pcm
+                )
+                for tick in ready_ticks:
+                    await self._process_gated_tick(tick)
+            else:
+                now_mono = time.monotonic()
+                if self._ticker_task is None or self._ticker_task.done():
+                    loop = asyncio.get_running_loop()
+                    self._ticker_task = loop.create_task(self._ticker_loop())
+                self.arrival_aligner.push_frame(
+                    device_idx=device_idx,
+                    pcm=pcm,
+                    arrival_time=now_mono,
+                    seq=seq,
+                    capture_ts_ms=capture_ts_ms,
+                )
 
     async def _process_gated_tick(self, tick) -> None:
         """Evaluates gate decision, pre-roll, utterance lock, and feeds audio to all lanes."""
@@ -538,6 +681,19 @@ class RealPipeline:
             history.append((tick.t_end_ms, metrics.snr_db))
             while history and history[0][0] < tick.t_end_ms - 3000.0:
                 history.popleft()
+
+        if self.on_gate_tick is not None:
+            dominant = gated_result.dominant_device
+            selected = dominant if (dominant is not None and gated_result.device_open.get(dominant, False)) else None
+            try:
+                self.on_gate_tick(
+                    list(tick.device_pcms.keys()),
+                    selected,
+                    getattr(gated_result, "runner_up_device", None),
+                    gated_result.device_metrics,
+                )
+            except Exception:
+                logger.exception("Error in on_gate_tick callback")
 
         if self.asr_backend == "deepgram" and self.session_stream is not None:
             selected = gated_result.dominant_device
@@ -582,17 +738,18 @@ class RealPipeline:
             lane = self.lanes[dev]
             m = gated_result.device_metrics.get(dev)
             snr_val = m.snr_db if m else None
+            chunk_to_feed = pcm_out if self.enable_gating else tick.device_pcms.get(dev, pcm_out)
 
             # 1. Pre-roll: when a gate opens, feed the lane the buffered 300 ms first
             # so word onsets are not clipped
-            if gated_result.device_just_opened.get(dev, False):
+            if self.enable_gating and gated_result.device_just_opened.get(dev, False):
                 if not lane.has_active_utterance:
                     lane._reset_utterance()
                 pre_roll = tick.device_pre_rolls.get(dev)
                 if pre_roll is not None and len(pre_roll) > 0:
                     if self.dump_dir:
                         self._post_gate_pcm_dumps.setdefault(dev, []).append(pre_roll.copy())
-                    pre_roll_dur_ms = len(pre_roll) / self.aligner.samples_per_ms
+                    pre_roll_dur_ms = len(pre_roll) / 16.0
                     await lane.feed(
                         pcm=pre_roll,
                         t_start_ms=tick.t_start_ms - pre_roll_dur_ms,
@@ -601,11 +758,11 @@ class RealPipeline:
                     )
 
             if self.dump_dir:
-                self._post_gate_pcm_dumps.setdefault(dev, []).append(pcm_out.copy())
+                self._post_gate_pcm_dumps.setdefault(dev, []).append(chunk_to_feed.copy())
 
             # 4. Route audio chunk (real PCM if open, zeros if truly closed)
             await lane.feed(
-                pcm=pcm_out,
+                pcm=chunk_to_feed,
                 t_start_ms=tick.t_start_ms,
                 overlap=gated_result.is_overlap and gated_result.device_open.get(dev, False),
                 snr_db=snr_val,
@@ -662,12 +819,31 @@ class RealPipeline:
     async def flush(self) -> None:
         """Flushes remaining audio from jitter buffer, gates, and lanes."""
         async with self._lock:
-            if self.enable_gating:
+            if self.align_mode == "timestamp" and self.enable_gating and self.aligner:
                 # Flush remaining buffered ticks past jitter hold-back
                 loop = asyncio.get_running_loop()
                 remaining_ticks = await loop.run_in_executor(self._ml_executor, self.aligner.flush)
                 for tick in remaining_ticks:
                     await self._process_gated_tick(tick)
+            elif self.arrival_aligner:
+                now_mono = time.monotonic()
+                tick_idx = 0
+                while any(len(q) > 0 for q in self.arrival_aligner.device_queues.values()):
+                    tick = self.arrival_aligner.extract_tick(
+                        now_mono=now_mono,
+                        tick_idx=tick_idx,
+                        t_start_ms=tick_idx * 100.0,
+                        t_end_ms=(tick_idx + 1) * 100.0,
+                    )
+                    if not tick:
+                        break
+                    tick_idx += 1
+                    if self.enable_gating:
+                        await self._process_gated_tick(tick)
+                    else:
+                        for dev, chunk in tick.device_pcms.items():
+                            lane = self.lanes[dev]
+                            await lane.feed(chunk, tick.t_start_ms)
 
             # Flush all per-device lanes
             for lane in list(self.lanes.values()):
@@ -678,6 +854,8 @@ class RealPipeline:
     async def close(self) -> None:
         """Closes all lanes, background workers, and resets aligner/gate."""
         self._closed = True
+        if hasattr(self, "_ticker_task") and self._ticker_task and not self._ticker_task.done():
+            self._ticker_task.cancel()
         await self.flush()
         for lane in list(self.lanes.values()):
             lane.close()
@@ -685,7 +863,10 @@ class RealPipeline:
             await self.session_stream.close()
         if self.whisper_queue:
             await self.whisper_queue.close()
-        self.aligner.reset()
+        if self.aligner:
+            self.aligner.reset()
+        if self.arrival_aligner:
+            self.arrival_aligner.reset()
         self.gate.reset()
         self._ml_executor.shutdown(wait=False)
         self._write_dumps()

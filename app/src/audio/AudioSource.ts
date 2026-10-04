@@ -1,6 +1,10 @@
-/**
- * AudioSource interface for streaming 16 kHz mono PCM frames.
- */
+export interface AudioFormatInfo {
+  sampleRate: number;
+  channels: number;
+  bitDepth: number;
+  byteOrder: string;
+  format: string;
+}
 
 export interface AudioSource {
   /**
@@ -17,4 +21,9 @@ export interface AudioSource {
    * Registers callback invoked on every ~100ms 1600-sample PCM chunk.
    */
   onChunk(callback: (pcm: Int16Array, captureTsMs: number) => void): void;
+
+  /**
+   * Returns audio format reported by the audio capture module.
+   */
+  getAudioFormat?(): AudioFormatInfo | null;
 }

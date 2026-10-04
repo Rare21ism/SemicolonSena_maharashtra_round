@@ -87,6 +87,7 @@ async def run_device(
             joined_raw = await ws.recv()
             joined = json.loads(joined_raw)
             device_idx = joined.get("device_idx", device_num)
+            session_clock_offset_ms = joined.get("session_clock_ms", 0.0) - (time.time() * 1000.0)
             print(f"[Device {device_num}] Joined as device_idx={device_idx}, token={joined.get('token')[:8]}...")
 
             # 2. Ping once to check latency
@@ -142,7 +143,7 @@ async def run_device(
                 else:
                     pcm = generate_synthetic_pcm(seq=seq, device_idx=device_idx)
 
-                capture_ts_ms = time.time() * 1000.0
+                capture_ts_ms = time.time() * 1000.0 + session_clock_offset_ms
                 frame_bytes = pack_audio_frame(
                     device_idx=device_idx,
                     seq=seq,
@@ -174,7 +175,7 @@ async def async_main():
 
     if not session_code:
         print(f"Creating a new session at {http_base}/sessions...")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(f"{http_base}/sessions")
             if resp.status_code != 200:
                 print(f"Failed to create session: {resp.status_code} {resp.text}", file=sys.stderr)
