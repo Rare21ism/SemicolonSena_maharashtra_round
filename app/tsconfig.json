@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -9,6 +8,7 @@
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "allowArbitraryExtensions": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@roundtable/protocol": [

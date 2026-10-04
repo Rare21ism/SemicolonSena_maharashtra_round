@@ -9,7 +9,6 @@ import asyncio
 from pathlib import Path
 import numpy as np
 import pytest
-import soundfile as sf
 
 from roundtable.ml.align import SessionAligner
 from roundtable.ml.energy import DeviceEnergyTracker, EnergyTracker, compute_dbfs
@@ -27,6 +26,7 @@ WAV_CANDIDATES = [
 def base_speech() -> np.ndarray:
     for p in WAV_CANDIDATES:
         if p.exists():
+            sf = pytest.importorskip("soundfile", reason="sample WAV tests require the optional soundfile dependency")
             data, sr = sf.read(str(p), dtype="int16")
             if data.ndim > 1:
                 data = data.mean(axis=1).astype(np.int16)

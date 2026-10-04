@@ -9,12 +9,7 @@ import React, {
 import { CaptionMessage, DeviceInfo } from "@roundtable/protocol";
 import { ExtendedCaptionMessage } from "../components/CaptionLine";
 import { ConnectionStatus, RoundtableClient } from "../net/ws";
-import { BrowserSpeechRecognizer, createAudioSource } from "../audio";
-import { getSpeakerColor } from "../theme";
-import {
-  DEMO_SCRIPT_STEPS,
-  INITIAL_DEMO_ROSTER,
-} from "./demoSimulation";
+import { createAudioSource } from "../audio";
 
 interface SessionContextType {
   sessionCode: string;
@@ -44,9 +39,6 @@ interface SessionContextType {
   toastMessage: string | null;
   showToast: (msg: string) => void;
   clearToast: () => void;
-  isDemoMode: boolean;
-  startDemoMode: () => void;
-  stopDemoMode: () => void;
   connectToSession: (code: string, participantName: string) => void;
   leaveSession: () => void;
   retryConnection: () => void;
@@ -68,26 +60,25 @@ const DEFAULT_SERVER_URL =
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [sessionCode, setSessionCode] = useState<string>("R7K4QM");
+  const [sessionCode, setSessionCode] = useState<string>("");
   const [sessionName, setSessionName] = useState<string>("Team Discussion");
-  const [isHost, setIsHost] = useState<boolean>(true);
-  const [name, setName] = useState<string>("Jim");
+  const [isHost, setIsHost] = useState<boolean>(false);
+  const [name, setName] = useState<string>("");
   const [serverUrl, setServerUrl] = useState<string>(DEFAULT_SERVER_URL);
-  const [myDeviceIdx, setMyDeviceIdx] = useState<number | null>(0);
-  const [status, setStatus] = useState<ConnectionStatus>("connected");
-  const [rttMs, setRttMs] = useState<number>(24);
-  const [offsetMs, setOffsetMs] = useState<number>(2.1);
-  const [roster, setRoster] = useState<DeviceInfo[]>(INITIAL_DEMO_ROSTER);
+  const [myDeviceIdx, setMyDeviceIdx] = useState<number | null>(null);
+  const [status, setStatus] = useState<ConnectionStatus>("disconnected");
+  const [rttMs, setRttMs] = useState<number>(0);
+  const [offsetMs, setOffsetMs] = useState<number>(0);
+  const [roster, setRoster] = useState<DeviceInfo[]>([]);
   const [captions, setCaptions] = useState<ExtendedCaptionMessage[]>([]);
   const [activeSpeakerId, setActiveSpeakerId] = useState<number | null>(null);
   const [overlappingCount, setOverlappingCount] = useState<number>(0);
   const [isBackfilling, setIsBackfilling] = useState<boolean>(false);
   const [backfillSeconds, setBackfillSeconds] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [micLevel, setMicLevel] = useState<number>(0.55);
-  const [micQuality, setMicQuality] = useState<"good" | "fair" | "poor">("good");
+  const [micLevel, setMicLevel] = useState<number>(0);
+  const [micQuality, setMicQuality] = useState<"good" | "fair" | "poor">("poor");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [voiceEnrolled, setVoiceEnrolled] = useState<boolean>(false);
   const [startTimeMs, setStartTimeMs] = useState<number>(Date.now());
   const [evalOpen, setEvalOpen] = useState<boolean>(false);
@@ -95,8 +86,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const clientRef = useRef<RoundtableClient | null>(null);
   const audioSourceRef = useRef<any>(null);
-  const recognizerRef = useRef<BrowserSpeechRecognizer | null>(null);
-  const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const connectedCodeRef = useRef<string | null>(null);
 
   const isMutedRef = useRef(isMuted);
@@ -108,11 +97,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     myDeviceIdxRef.current = myDeviceIdx;
   }, [myDeviceIdx]);
-
-  const activeSpeakerIdRef = useRef(activeSpeakerId);
-  useEffect(() => {
-    activeSpeakerIdRef.current = activeSpeakerId;
-  }, [activeSpeakerId]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -131,8 +115,14 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
     setCaptions((prev) => {
       const index = prev.findIndex((c) => c.line_id === caption.line_id);
       if (index !== -1) {
+        const current = prev[index];
+        // WebSocket delivery can race with a reconnect or another caption source.
+        // Keep the newest revision and never let a stale draft replace a final line.
+        if (current.state === "final" || caption.rev <= current.rev) {
+          return prev;
+        }
         const next = [...prev];
-        next[index] = { ...next[index], ...caption };
+        next[index] = { ...current, ...caption };
         return next;
       }
       return [...prev, caption];
@@ -151,18 +141,21 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const errorBody = await res.json();
+          if (typeof errorBody.detail === "string") detail = errorBody.detail;
+        } catch {}
+        throw new Error(detail);
+      }
       const data = await res.json();
       setSessionCode(data.code);
       if (roomName) setSessionName(roomName);
       setIsHost(true);
       return data.code;
-    } catch {
-      const fallbackCode = "R7K4QM";
-      setSessionCode(fallbackCode);
-      if (roomName) setSessionName(roomName);
-      setIsHost(true);
-      return fallbackCode;
+    } catch (error) {
+      throw new Error(`Could not create a meeting on the server: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -173,80 +166,18 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       const base = serverUrl.trim().replace(/\/+$/, "");
       const res = await fetch(`${base}/sessions/${code}`);
-      if (!res.ok) throw new Error("Not found");
+      if (res.status === 404) return { exists: false, roster: [] };
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return { exists: true, roster: data.roster || [] };
-    } catch {
-      return { exists: true, roster: INITIAL_DEMO_ROSTER };
+    } catch (error) {
+      throw new Error(`Could not check the meeting on the server: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
-
-  // Stop Demo Mode
-  const stopDemoMode = useCallback(() => {
-    setIsDemoMode(false);
-    demoTimersRef.current.forEach((t) => clearTimeout(t));
-    demoTimersRef.current = [];
-  }, []);
-
-  // Start Demo Mode
-  const startDemoMode = useCallback(() => {
-    stopDemoMode();
-    setIsDemoMode(true);
-    setCaptions([]);
-    setRoster(INITIAL_DEMO_ROSTER);
-    setMyDeviceIdx(0);
-    setStatus("connected");
-    setIsBackfilling(false);
-    setOverlappingCount(0);
-    showToast("Interactive Meeting Demo started");
-
-    let accumulatedTime = 0;
-    DEMO_SCRIPT_STEPS.forEach((step) => {
-      accumulatedTime += step.delayMs;
-      const timer = setTimeout(() => {
-        switch (step.type) {
-          case "speaking_start":
-            setActiveSpeakerId(step.payload.speaker_id);
-            break;
-          case "caption_draft":
-          case "caption_revision":
-          case "caption_final":
-            handleIncomingCaption(step.payload);
-            break;
-          case "overlap_start":
-            setOverlappingCount(step.payload.count || 2);
-            break;
-          case "overlap_end":
-            setOverlappingCount(0);
-            break;
-          case "connection_lost":
-            setStatus("disconnected");
-            break;
-          case "reconnecting":
-            setStatus("reconnecting");
-            break;
-          case "connection_restored":
-            setStatus("connected");
-            setIsBackfilling(true);
-            setBackfillSeconds(step.payload.backfillSeconds || 2.1);
-            break;
-          case "backfill_complete":
-            setIsBackfilling(false);
-            showToast("Conversation synced");
-            break;
-          case "toast":
-            showToast(step.payload.message);
-            break;
-        }
-      }, accumulatedTime);
-      demoTimersRef.current.push(timer);
-    });
-  }, [handleIncomingCaption, showToast, stopDemoMode]);
 
   // Connect to real WebSocket & Start live microphone speech-to-text
   const connectToSession = useCallback(
     (code: string, participantName: string) => {
-      stopDemoMode();
       setSessionCode(code);
       setName(participantName);
       setStartTimeMs(Date.now());
@@ -264,6 +195,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
       if (clientRef.current) {
         clientRef.current.disconnect();
       }
+      if (audioSourceRef.current) {
+        audioSourceRef.current.stop();
+        audioSourceRef.current = null;
+      }
 
       const client = new RoundtableClient({
         serverUrl,
@@ -274,11 +209,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
           setMyDeviceIdx(msg.device_idx);
           myDeviceIdxRef.current = msg.device_idx;
           showToast(`Joined as device #${msg.device_idx}`);
-          recognizerRef.current?.updateSpeaker(
-            msg.device_idx,
-            participantName,
-            getSpeakerColor(msg.device_idx).color
-          );
         },
         onClockSync: (offset, rtt) => {
           setOffsetMs(offset);
@@ -295,68 +225,46 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
       clientRef.current = client;
       client.connect();
 
-      // 1. Live Speech Recognition & Audio Recording
-      if (recognizerRef.current) {
-        recognizerRef.current.stop();
-      }
-      const recognizer = new BrowserSpeechRecognizer({
-        speakerId: myDeviceIdxRef.current,
-        speakerName: participantName,
-        speakerColor: getSpeakerColor(myDeviceIdxRef.current).color,
-        onCaption: (caption) => {
-          if (!isMutedRef.current) {
-            handleIncomingCaption(caption);
-            client.sendCaption(caption);
-          }
-        },
-        onSpeakingChange: (isSpeaking) => {
-          if (isSpeaking && !isMutedRef.current) {
-            setActiveSpeakerId(myDeviceIdxRef.current);
-          } else if (!isSpeaking) {
-            setActiveSpeakerId((prev) =>
-              prev === myDeviceIdxRef.current ? null : prev
-            );
-          }
-        },
-      });
-      recognizerRef.current = recognizer;
-      recognizer.start();
-
-      // 2. 16 kHz PCM Audio Frame Capture
+      // Stream real 16 kHz PCM; caption recognition and speaker IDs come from the server pipeline.
       const audioSource = createAudioSource();
       audioSourceRef.current = audioSource;
       audioSource.onChunk((pcm, ts) => {
+        let sumSquares = 0;
+        for (let i = 0; i < pcm.length; i++) {
+          const sample = pcm[i] / 32768;
+          sumSquares += sample * sample;
+        }
+        const rms = Math.sqrt(sumSquares / Math.max(1, pcm.length));
+        const level = Math.min(1, rms * 4);
+        setMicLevel(level);
+        setMicQuality(level >= 0.12 ? "good" : level >= 0.025 ? "fair" : "poor");
         if (!isMutedRef.current) {
           client.sendAudioFrame(pcm, ts);
         }
       });
       audioSource.start().catch((e) => {
-        console.warn("Audio start error:", e);
+        console.error("Audio capture could not start:", e);
+        showToast(e instanceof Error ? e.message : "Audio capture could not start.");
       });
     },
-    [handleIncomingCaption, serverUrl, showToast, stopDemoMode]
+    [handleIncomingCaption, serverUrl, showToast]
   );
 
   // Leave session
   const leaveSession = useCallback(() => {
-    stopDemoMode();
     connectedCodeRef.current = null;
-    if (recognizerRef.current) {
-      const url = recognizerRef.current.getRecordedAudioUrl();
-      if (url) setRecordedAudioUrl(url);
-      recognizerRef.current.stop();
-      recognizerRef.current = null;
-    }
     if (audioSourceRef.current) {
       audioSourceRef.current.stop();
       audioSourceRef.current = null;
     }
+    setMicLevel(0);
+    setMicQuality("poor");
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;
     }
     setStatus("disconnected");
-  }, [stopDemoMode]);
+  }, []);
 
   const retryConnection = useCallback(() => {
     if (clientRef.current) {
@@ -368,10 +276,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     return () => {
-      stopDemoMode();
       leaveSession();
     };
-  }, [leaveSession, stopDemoMode]);
+  }, [leaveSession]);
 
   return (
     <SessionContext.Provider
@@ -403,9 +310,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         toastMessage,
         showToast,
         clearToast,
-        isDemoMode,
-        startDemoMode,
-        stopDemoMode,
         connectToSession,
         leaveSession,
         retryConnection,

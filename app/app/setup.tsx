@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Platform,
   ScrollView,
@@ -21,57 +21,63 @@ export default function AudioSetupScreen() {
   const { sessionCode, sessionName } = useSession();
 
   const [hasPermission, setHasPermission] = useState<boolean>(false);
-  const [level, setLevel] = useState<number>(0.55);
-  const [quality, setQuality] = useState<"good" | "fair" | "poor">("good");
-  const [selectedDevice, setSelectedDevice] = useState("Default System Microphone");
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [level, setLevel] = useState<number>(0);
+  const [quality, setQuality] = useState<"good" | "fair" | "poor">("poor");
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationRef = useRef<number | null>(null);
 
-  // Request mic permission on Web or mock for native
+  useEffect(() => () => {
+    if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      void audioContextRef.current.close();
+    }
+  }, []);
+
   const requestPermission = async () => {
-    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.mediaDevices) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setHasPermission(true);
-        // Connect web audio meter
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 64;
-        const source = audioCtx.createMediaStreamSource(stream);
-        source.connect(analyser);
+    setPermissionError(null);
+    if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setPermissionError("Microphone access is unavailable in this environment. Please open Roundtable in a modern web browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const audioCtx = new AudioContext();
+      audioContextRef.current = audioCtx;
+      await audioCtx.resume();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const muted = audioCtx.createGain();
+      muted.gain.value = 0;
+      source.connect(analyser);
+      analyser.connect(muted);
+      muted.connect(audioCtx.destination);
 
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const updateLevel = () => {
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-          }
-          const avg = sum / dataArray.length / 255;
-          setLevel(Math.max(0.1, avg * 1.8));
-          if (avg > 0.05) setQuality("good");
-          requestAnimationFrame(updateLevel);
-        };
-        updateLevel();
-      } catch (e) {
-        console.warn("Permission denied or unavailable, using simulation:", e);
-        setHasPermission(true);
-      }
-    } else {
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateLevel = () => {
+        analyser.getByteTimeDomainData(dataArray);
+        let sumSquares = 0;
+        for (const sample of dataArray) {
+          const normalized = (sample - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+        setLevel(Math.min(1, rms * 4));
+        setQuality(rms > 0.02 ? "good" : "poor");
+        animationRef.current = requestAnimationFrame(updateLevel);
+      };
       setHasPermission(true);
+      updateLevel();
+    } catch (error) {
+      console.warn("Microphone permission failed:", error);
+      setPermissionError("Microphone access is needed to capture room speech. Check browser permissions and try again.");
+      setHasPermission(false);
     }
   };
-
-  // Simulate audio level activity if no real mic attached
-  useEffect(() => {
-    if (!hasPermission) return;
-    const interval = setInterval(() => {
-      setLevel((prev) => {
-        const delta = (Math.random() - 0.48) * 0.2;
-        return Math.min(0.85, Math.max(0.15, prev + delta));
-      });
-    }, 150);
-    return () => clearInterval(interval);
-  }, [hasPermission]);
 
   const handleContinue = () => {
     router.push("/enroll");
@@ -90,66 +96,59 @@ export default function AudioSetupScreen() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
+            <Ionicons name="arrow-back" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Check your microphone</Text>
+          <Text style={styles.headerTitle}>MICROPHONE SETUP</Text>
           <View style={{ width: 32 }} />
         </View>
 
-        {/* Meeting Pill */}
+        {/* Room Pill */}
         <View style={styles.roomPill}>
-          <Text style={styles.roomPillLabel}>MEETING</Text>
-          <Text style={styles.roomPillCode}>{sessionName || "Team Discussion"}</Text>
+          <Text style={styles.roomPillCode}>{sessionName || "Group Discussion"}</Text>
           <Text style={styles.roomPillCodeTag}>[{sessionCode}]</Text>
         </View>
 
         {!hasPermission ? (
-          /* Permission Request State (Section 11) */
           <View style={styles.card}>
-            <View style={styles.micCircle}>
-              <Ionicons name="mic-outline" size={32} color={colors.primary} />
-            </View>
-
-            <Text style={styles.cardTitle}>Check your microphone</Text>
+            <Text style={styles.cardKicker}>AUDIO INPUT CHECK</Text>
+            <Text style={styles.cardTitle}>Can Roundtable hear you?</Text>
             <Text style={styles.cardDesc}>
-              Roundtable needs microphone access to identify your voice and
-              generate live captions for the meeting.
+              Allow microphone access so Roundtable can convert spoken words into live captions.
             </Text>
 
+            {permissionError && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={16} color={colors.danger} />
+                <Text style={styles.permissionError}>{permissionError}</Text>
+              </View>
+            )}
+
             <Button
-              title="Allow microphone"
+              title="Enable Microphone"
               variant="primary"
               size="lg"
-              icon={<Ionicons name="mic" size={18} color="#FFFFFF" />}
+              icon={<Ionicons name="mic" size={18} color="#FBF9F5" />}
               onPress={requestPermission}
               style={styles.btnFull}
             />
-
-            <TouchableOpacity
-              style={styles.skipBtn}
-              onPress={() => setHasPermission(true)}
-            >
-              <Text style={styles.skipBtnText}>Continue with system default</Text>
-            </TouchableOpacity>
           </View>
         ) : (
-          /* Permission Granted & Active Audio Level State (Section 11) */
           <View style={styles.card}>
-            <View style={styles.readyCircle}>
-              <Ionicons name="checkmark-circle" size={32} color={colors.success} />
+            <View style={styles.readyHeader}>
+              <View style={styles.readyDot} />
+              <Text style={styles.cardKicker}>MICROPHONE ACTIVE</Text>
             </View>
 
-            <Text style={styles.cardTitle}>Microphone ready</Text>
+            <Text style={styles.cardTitle}>Microphone connected</Text>
             <Text style={styles.cardDesc}>
-              Speak normally to test your audio. Your device will contribute to
-              the synchronized meeting audio array.
+              Speak a few words to confirm your voice is being captured clearly.
             </Text>
 
-            {/* Audio Waveform Visualizer */}
+            {/* Restrained Audio Waveform Visualizer */}
             <View style={styles.waveformWrapper}>
               <AudioWaveform
                 isActive={true}
-                height={50}
+                height={40}
                 barCount={28}
                 color={colors.primaryLight}
                 level={level}
@@ -159,58 +158,14 @@ export default function AudioSetupScreen() {
             {/* Audio Level Meter */}
             <AudioLevelMeter level={level} quality={quality} />
 
-            {/* Selected Microphone Device */}
-            <View style={styles.deviceRow}>
-              <Ionicons name="hardware-chip-outline" size={16} color={colors.textMuted} />
-              <Text style={styles.deviceText} numberOfLines={1}>
-                {selectedDevice}
-              </Text>
-            </View>
-
-            {/* Advanced Hardware Diagnostics Toggle */}
-            <TouchableOpacity
-              style={styles.advancedToggle}
-              onPress={() => setShowAdvanced(!showAdvanced)}
-            >
-              <Ionicons
-                name={showAdvanced ? "chevron-up" : "chevron-down"}
-                size={14}
-                color={colors.textMuted}
-              />
-              <Text style={styles.advancedToggleText}>
-                {showAdvanced ? "Hide audio settings" : "Advanced microphone settings"}
-              </Text>
-            </TouchableOpacity>
-
-            {showAdvanced && (
-              <View style={styles.diagnosticsBox}>
-                <View style={styles.diagRow}>
-                  <Text style={styles.diagLabel}>Format</Text>
-                  <Text style={styles.diagValue}>16-bit Int16 PCM, Mono</Text>
-                </View>
-                <View style={styles.diagRow}>
-                  <Text style={styles.diagLabel}>Sample Rate</Text>
-                  <Text style={styles.diagValue}>16,000 Hz</Text>
-                </View>
-                <View style={styles.diagRow}>
-                  <Text style={styles.diagLabel}>Frame Chunk</Text>
-                  <Text style={styles.diagValue}>100 ms (1,600 samples)</Text>
-                </View>
-                <View style={styles.diagRow}>
-                  <Text style={styles.diagLabel}>Hardware Processing</Text>
-                  <Text style={styles.diagValue}>Raw feed, server fused</Text>
-                </View>
-              </View>
-            )}
-
             {/* Continue Button */}
             <Button
-              title="Continue to Voice Enrollment"
+              title="Continue to Voice Setup"
               variant="primary"
               size="lg"
-              icon={<Ionicons name="arrow-forward" size={18} color="#FFFFFF" />}
+              rightIcon={<Ionicons name="arrow-forward" size={18} color="#FBF9F5" />}
               onPress={handleContinue}
-              style={[styles.btnFull, { marginTop: 20 }]}
+              style={[styles.btnFull, { marginTop: 24 }]}
             />
           </View>
         )}
@@ -225,10 +180,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgPrimary,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
     paddingBottom: 48,
-    maxWidth: 580,
+    maxWidth: 540,
     width: "100%",
     alignSelf: "center",
   },
@@ -236,154 +191,117 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
   backButton: {
-    padding: 6,
+    padding: 8,
     borderRadius: radii.sm,
     backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: 12,
+    fontWeight: "800",
     color: colors.textPrimary,
+    letterSpacing: 2,
   },
   roomPill: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "center",
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
+    backgroundColor: colors.bgSecondary,
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.3)",
-    paddingVertical: 4,
-    paddingHorizontal: 12,
+    borderColor: colors.borderDefault,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
     borderRadius: radii.full,
-    gap: 6,
-    marginBottom: 20,
-  },
-  roomPillLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.primaryLight,
+    gap: 8,
+    marginBottom: 28,
   },
   roomPillCode: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.textPrimary,
   },
   roomPillCodeTag: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     color: colors.textMuted,
     fontFamily: "monospace",
   },
   card: {
     backgroundColor: colors.bgCard,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing.xl,
-    alignItems: "center",
+    alignItems: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  micCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+  cardKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 6,
   },
-  readyCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
+  readyHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 6,
+  },
+  readyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.success,
   },
   cardTitle: {
-    ...typography.h2,
-    textAlign: "center",
+    ...typography.h1,
+    textAlign: "left",
     marginBottom: 8,
   },
   cardDesc: {
     ...typography.body,
-    textAlign: "center",
-    color: colors.textMuted,
+    textAlign: "left",
+    color: colors.textSecondary,
     marginBottom: 20,
-    maxWidth: 420,
+    lineHeight: 23,
+  },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.dangerBg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    marginBottom: 16,
+    width: "100%",
+  },
+  permissionError: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
   },
   waveformWrapper: {
     width: "100%",
-    backgroundColor: colors.bgInput,
-    borderRadius: radii.lg,
-    paddingVertical: 14,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radii.md,
+    paddingVertical: 16,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    marginBottom: 12,
-  },
-  deviceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radii.md,
-  },
-  deviceText: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  advancedToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 10,
-    marginTop: 6,
-  },
-  advancedToggleText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontWeight: "600",
-  },
-  diagnosticsBox: {
-    width: "100%",
-    backgroundColor: colors.bgPrimary,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    padding: spacing.md,
-    marginTop: 4,
-    gap: 8,
-  },
-  diagRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  diagLabel: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  diagValue: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.textSecondary,
-    fontFamily: "monospace",
+    marginBottom: 16,
   },
   btnFull: {
     width: "100%",
-  },
-  skipBtn: {
-    paddingVertical: 12,
-    marginTop: 4,
-  },
-  skipBtnText: {
-    fontSize: 13,
-    color: colors.textMuted,
-    fontWeight: "600",
   },
 });

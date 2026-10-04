@@ -1,111 +1,121 @@
 /**
- * Roundtable Design System Tokens
- * Curated dark-first palette, typography scale, speaker colors, and layout constants.
+ * Roundtable Editorial Design System Tokens
+ * Reference-driven editorial typography, generous whitespace, restrained sage/charcoal palette.
  */
 
 export const colors = {
-  // Backgrounds
-  bgPrimary: "#070B14",       // Deepest space navy
-  bgSecondary: "#0D1322",     // Surface background
-  bgCard: "#131C2E",          // Elevated card background
-  bgCardHover: "#1A253C",     // Card hover state
-  bgInput: "#0A0F1D",         // Input field background
-  bgGlass: "rgba(13, 19, 34, 0.85)", // Glassmorphic overlay
+  // Backgrounds (Warm Paper / Cream Editorial Palette)
+  bgPrimary: "#FBF9F5",       // Warm bone / cream background
+  bgSecondary: "#F3F0EA",     // Elevated surface tone
+  bgCard: "#FFFFFF",          // Crisp white card surface
+  bgCardHover: "#F7F5F1",     // Light hover tint
+  bgInput: "#FFFFFF",         // Clean white input surface
+  bgDark: "#141614",          // Deep obsidian dark contrast
+  bgGlass: "rgba(251, 249, 245, 0.92)",
 
-  // Borders
-  borderSubtle: "rgba(255, 255, 255, 0.07)",
-  borderDefault: "rgba(255, 255, 255, 0.12)",
-  borderBright: "rgba(255, 255, 255, 0.22)",
-  borderActive: "rgba(99, 102, 241, 0.5)",
+  // Hairline & Subtle Borders
+  borderSubtle: "rgba(18, 19, 18, 0.06)",
+  borderDefault: "rgba(18, 19, 18, 0.12)",
+  borderBright: "rgba(18, 19, 18, 0.25)",
+  borderActive: "#38493B",
 
-  // Brand Accents
-  primary: "#6366F1",         // Indigo
-  primaryLight: "#818CF8",
-  primaryDark: "#4F46E5",
-  primaryGlow: "rgba(99, 102, 241, 0.25)",
-  cyan: "#06B6D4",
-  cyanGlow: "rgba(6, 182, 212, 0.2)",
+  // Editorial Accent Palette (Sage Moss & Warm Terracotta)
+  primary: "#2C392F",         // Deep Sage / Charcoal
+  primaryLight: "#4E6352",    // Lighter Sage
+  primaryDark: "#1B241D",
+  primaryGlow: "rgba(56, 73, 59, 0.08)",
+  accentTerracotta: "#C55A11", // Subtle warm accent
 
-  // Status & Telemetry
-  success: "#10B981",         // Emerald
-  successGlow: "rgba(16, 185, 129, 0.2)",
-  warning: "#F59E0B",         // Amber
-  warningGlow: "rgba(245, 158, 11, 0.2)",
-  danger: "#EF4444",          // Crimson
-  dangerGlow: "rgba(239, 68, 68, 0.2)",
-  info: "#3B82F6",            // Sky blue
+  // Restrained Status Telemetry
+  success: "#2B6140",         // Deep forest green
+  successBg: "rgba(43, 97, 64, 0.08)",
+  warning: "#9A5D16",         // Muted warm amber
+  warningBg: "rgba(154, 93, 22, 0.08)",
+  danger: "#A83232",          // Muted crimson
+  dangerBg: "rgba(168, 50, 50, 0.08)",
+  info: "#2F4356",
 
-  // Text Hierarchy
-  textPrimary: "#F8FAFC",     // High contrast white
-  textSecondary: "#CBD5E1",   // Slate-300
-  textMuted: "#64748B",       // Slate-500
-  textDim: "#475569",         // Slate-600
+  // Typography & Content Hierarchy
+  textPrimary: "#111211",     // High contrast near-black
+  textSecondary: "#484B48",   // Charcoal slate
+  textMuted: "#747774",       // Muted gray-green
+  textDim: "#9FA29F",         // Soft dim gray
 
-  // Participant Speaker Palette (Jim, Pam, Dwight, Michael)
+  // Curated Editorial Speaker Palette (Harmonious & Distinct)
   speakers: [
-    { id: 0, color: "#8B5CF6", bg: "rgba(139, 92, 246, 0.14)", label: "Jim (Purple)" },
-    { id: 1, color: "#0284C7", bg: "rgba(2, 132, 199, 0.14)", label: "Pam (Blue)" },
-    { id: 2, color: "#10B981", bg: "rgba(16, 185, 129, 0.14)", label: "Dwight (Green)" },
-    { id: 3, color: "#F97316", bg: "rgba(249, 115, 22, 0.14)", label: "Michael (Orange)" },
-    { id: 4, color: "#EC4899", bg: "rgba(236, 72, 153, 0.14)", label: "Rose" },
-    { id: 5, color: "#14B8A6", bg: "rgba(20, 184, 166, 0.14)", label: "Teal" },
+    { id: 0, color: "#2E523F", bg: "rgba(46, 82, 63, 0.08)", label: "Forest" },
+    { id: 1, color: "#8C4B37", bg: "rgba(140, 75, 55, 0.08)", label: "Rust" },
+    { id: 2, color: "#2F4356", bg: "rgba(47, 67, 86, 0.08)", label: "Slate" },
+    { id: 3, color: "#5E3A54", bg: "rgba(94, 58, 84, 0.08)", label: "Plum" },
+    { id: 4, color: "#7D6628", bg: "rgba(125, 102, 40, 0.08)", label: "Ochre" },
+    { id: 5, color: "#385A5A", bg: "rgba(56, 90, 90, 0.08)", label: "Teal" },
   ],
   speakerDefault: {
-    color: "#94A3B8",
-    bg: "rgba(148, 163, 184, 0.12)",
-    label: "Unknown / Ambient",
+    color: "#484B48",
+    bg: "rgba(72, 75, 72, 0.08)",
+    label: "Speaker",
   },
 };
 
 export const typography = {
-  h1: {
-    fontSize: 32,
+  display1: {
+    fontSize: 52,
     fontWeight: "800" as const,
-    letterSpacing: -0.6,
+    letterSpacing: -1.6,
     color: colors.textPrimary,
+    lineHeight: 58,
+  },
+  h1: {
+    fontSize: 36,
+    fontWeight: "800" as const,
+    letterSpacing: -1.0,
+    color: colors.textPrimary,
+    lineHeight: 44,
   },
   h2: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "700" as const,
-    letterSpacing: -0.4,
+    letterSpacing: -0.6,
     color: colors.textPrimary,
+    lineHeight: 34,
   },
   h3: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    letterSpacing: -0.2,
+    fontSize: 19,
+    fontWeight: "600" as const,
+    letterSpacing: -0.3,
     color: colors.textPrimary,
+    lineHeight: 27,
   },
   body: {
     fontSize: 15,
     fontWeight: "400" as const,
     color: colors.textSecondary,
-    lineHeight: 22,
+    lineHeight: 24,
   },
   caption: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: "500" as const,
     color: colors.textPrimary,
-    lineHeight: 30,
-    letterSpacing: 0.1,
+    lineHeight: 33,
+    letterSpacing: -0.2,
   },
   captionDraft: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: "400" as const,
-    color: "#CBD5E1",
-    lineHeight: 30,
-    letterSpacing: 0.1,
+    color: "#747774",
+    lineHeight: 33,
+    letterSpacing: -0.2,
   },
   code: {
     fontFamily: "monospace",
     fontSize: 14,
-    fontWeight: "700" as const,
+    fontWeight: "600" as const,
     letterSpacing: 1.5,
   },
   label: {
     fontSize: 11,
     fontWeight: "700" as const,
-    letterSpacing: 0.8,
+    letterSpacing: 1.5,
     textTransform: "uppercase" as const,
     color: colors.textMuted,
   },
@@ -114,17 +124,18 @@ export const typography = {
 export const spacing = {
   xs: 4,
   sm: 8,
-  md: 14,
-  lg: 20,
-  xl: 28,
-  xxl: 40,
+  md: 16,
+  lg: 24,
+  xl: 36,
+  xxl: 52,
 };
 
 export const radii = {
-  sm: 6,
-  md: 10,
-  lg: 16,
-  xl: 22,
+  none: 0,
+  sm: 4,
+  md: 8,
+  lg: 12,
+  xl: 16,
   full: 9999,
 };
 
@@ -135,3 +146,5 @@ export function getSpeakerColor(speakerId: number | null): { color: string; bg: 
   const match = colors.speakers[speakerId % colors.speakers.length];
   return { color: match.color, bg: match.bg };
 }
+
+

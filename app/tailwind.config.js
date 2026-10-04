@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: "class",
   content: [
     "./app/**/*.{js,jsx,ts,tsx}",
     "./src/**/*.{js,jsx,ts,tsx}",
@@ -8,31 +9,26 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bgPrimary: "#0B0F19",
-        bgSecondary: "#111827",
-        bgCard: "#1F2937",
-        bgCardHover: "#283548",
-        bgInput: "#151C2C",
-        borderDefault: "#374151",
-        borderFocus: "#6366F1",
-        primary: "#6366F1",
-        primaryLight: "#818CF8",
-        primaryDark: "#4F46E5",
-        success: "#10B981",
-        warning: "#F59E0B",
-        danger: "#EF4444",
-        textPrimary: "#F9FAFB",
-        textSecondary: "#E5E7EB",
-        textMuted: "#9CA3AF",
-        textDisabled: "#4B5563",
-        speaker: {
-          jim: "#A855F7",
-          pam: "#3B82F6",
-          dwight: "#10B981",
-          michael: "#F59E0B",
-        },
+        bgPrimary: "#FBF9F5",
+        bgSecondary: "#F3F0EA",
+        bgCard: "#FFFFFF",
+        bgCardHover: "#F7F5F1",
+        bgInput: "#FFFFFF",
+        borderDefault: "rgba(18, 19, 18, 0.12)",
+        borderFocus: "#38493B",
+        primary: "#2C392F",
+        primaryLight: "#4E6352",
+        primaryDark: "#1B241D",
+        success: "#2B6140",
+        warning: "#9A5D16",
+        danger: "#A83232",
+        textPrimary: "#111211",
+        textSecondary: "#484B48",
+        textMuted: "#747774",
+        textDisabled: "#9FA29F",
       },
     },
   },
   plugins: [],
 };
+

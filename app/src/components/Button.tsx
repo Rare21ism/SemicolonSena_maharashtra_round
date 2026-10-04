@@ -162,20 +162,25 @@ const styles = StyleSheet.create({
   primary: {
     backgroundColor: colors.primary,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.15)",
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 4,
+    borderColor: "rgba(18, 19, 18, 0.2)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   primaryText: {
-    color: "#FFFFFF",
+    color: "#FBF9F5",
   },
   secondary: {
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderDefault,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
   secondaryText: {
     color: colors.textPrimary,
@@ -183,7 +188,7 @@ const styles = StyleSheet.create({
   outline: {
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: colors.borderBright,
+    borderColor: colors.borderDefault,
   },
   outlineText: {
     color: colors.textPrimary,
@@ -196,11 +201,14 @@ const styles = StyleSheet.create({
   },
   danger: {
     backgroundColor: colors.danger,
+    borderWidth: 1,
+    borderColor: "rgba(168, 50, 50, 0.2)",
   },
   dangerText: {
     color: "#FFFFFF",
   },
   disabled: {
-    opacity: 0.45,
+    opacity: 0.4,
   },
 });
+

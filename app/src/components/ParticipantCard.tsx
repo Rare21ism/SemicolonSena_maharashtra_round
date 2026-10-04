@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { DeviceInfo } from "@roundtable/protocol";
-import { colors, radii, spacing, typography } from "../theme";
+import { colors, radii } from "../theme";
 import { ParticipantAvatar } from "./ParticipantAvatar";
 
 export interface ParticipantCardProps {
@@ -11,23 +11,20 @@ export interface ParticipantCardProps {
   isSpeaking?: boolean;
   statusText?: string;
   connectionQuality?: "good" | "fair" | "reconnecting" | "offline";
-  latencyMs?: number;
 }
 
 export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   device,
   isSelf = false,
   isSpeaking = false,
-  statusText = "Ready",
+  statusText = "Connected",
   connectionQuality = "good",
-  latencyMs,
 }) => {
   const getQualityDot = () => {
     switch (connectionQuality) {
       case "good":
         return colors.success;
       case "fair":
-        return colors.warning;
       case "reconnecting":
         return colors.warning;
       default:
@@ -59,7 +56,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           speakerId={device.device_idx}
           color={device.color}
           isSpeaking={isSpeaking}
-          size={38}
+          size={36}
         />
         <View style={styles.infoCol}>
           <View style={styles.nameRow}>
@@ -83,9 +80,6 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             <Text style={styles.statusSubtext} numberOfLines={1}>
               {isSpeaking ? "Speaking" : statusText}
             </Text>
-            {latencyMs !== undefined && latencyMs > 0 && (
-              <Text style={styles.latencyText}>· {Math.round(latencyMs)}ms</Text>
-            )}
           </View>
         </View>
       </View>
@@ -114,27 +108,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: colors.bgCard,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginVertical: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginVertical: 2,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   cardSelf: {
-    backgroundColor: "rgba(99, 102, 241, 0.08)",
-    borderColor: "rgba(99, 102, 241, 0.3)",
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderBright,
   },
   leftRow: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    gap: 10,
+    gap: 12,
   },
   infoCol: {
     flex: 1,
@@ -145,43 +139,36 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   nameText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: colors.textPrimary,
   },
   selfBadge: {
-    backgroundColor: "rgba(99, 102, 241, 0.2)",
+    backgroundColor: "rgba(44, 57, 47, 0.1)",
     paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingVertical: 2,
     borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.4)",
   },
   selfBadgeText: {
     fontSize: 9,
     fontWeight: "800",
-    color: colors.primaryLight,
-    letterSpacing: 0.5,
+    color: colors.primary,
+    letterSpacing: 0.8,
   },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 3,
+    marginTop: 2,
     gap: 5,
   },
   statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   statusSubtext: {
     fontSize: 12,
     color: colors.textMuted,
-  },
-  latencyText: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontFamily: "monospace",
   },
   rightBadges: {
     flexDirection: "row",
@@ -190,8 +177,10 @@ const styles = StyleSheet.create({
   platformBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    paddingHorizontal: 7,
+    backgroundColor: colors.bgSecondary,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radii.sm,
     gap: 4,
@@ -202,3 +191,5 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 });
+
+

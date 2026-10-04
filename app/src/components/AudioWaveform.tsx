@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { colors, radii } from "../theme";
 
@@ -15,33 +15,16 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
   barCount = 24,
   height = 56,
   color = colors.primary,
-  level = 0.5,
+  level = 0,
 }) => {
-  const [barHeights, setBarHeights] = useState<number[]>(() =>
-    Array.from({ length: barCount }, () => 8)
-  );
-
-  useEffect(() => {
-    if (!isActive) {
-      setBarHeights(Array.from({ length: barCount }, () => 6));
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setBarHeights((prev) =>
-        prev.map((_, i) => {
-          // Create natural bell-curve / voice frequency distribution
-          const centerDist = Math.abs(i - barCount / 2) / (barCount / 2);
-          const bellCurve = Math.max(0.2, 1 - centerDist * 0.7);
-          const noise = 0.3 + Math.random() * 0.7;
-          const target = Math.max(6, height * level * bellCurve * noise);
-          return Math.min(height, Math.round(target));
-        })
-      );
-    }, 90);
-
-    return () => clearInterval(interval);
-  }, [isActive, barCount, height, level]);
+  const barHeights = useMemo(() => {
+    const shape = [0.24, 0.38, 0.58, 0.82, 0.52, 0.34, 0.7, 0.92, 0.48, 0.3];
+    const normalizedLevel = Math.max(0, Math.min(level, 1));
+    return Array.from({ length: barCount }, (_, index) => {
+      if (!isActive || normalizedLevel < 0.01) return 4;
+      return Math.max(4, Math.round(height * normalizedLevel * shape[index % shape.length]));
+    });
+  }, [barCount, height, isActive, level]);
 
   return (
     <View style={[styles.container, { height }]}>
@@ -52,7 +35,7 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
             styles.bar,
             {
               height: h,
-              backgroundColor: isActive ? color : "rgba(255, 255, 255, 0.12)",
+              backgroundColor: isActive && level >= 0.01 ? color : colors.borderDefault,
               shadowColor: isActive ? color : "transparent",
               shadowOpacity: isActive ? 0.3 : 0,
               shadowRadius: 3,

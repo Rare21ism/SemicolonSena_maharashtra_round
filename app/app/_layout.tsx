@@ -12,7 +12,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <SessionProvider>
         <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
-          <StatusBar style="light" />
+          <StatusBar style="dark" />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.bgPrimary },
@@ -22,6 +22,7 @@ export default function RootLayout() {
             animation: "fade",
           }}
         >
+
           <Stack.Screen
             name="index"
             options={{

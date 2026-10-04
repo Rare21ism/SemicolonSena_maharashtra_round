@@ -9,7 +9,6 @@ Unit tests for Lane and Whisper correction queue:
 import asyncio
 from pathlib import Path
 import pytest
-import soundfile as sf
 import numpy as np
 
 from roundtable.ml.engine import StreamingASR, FinalASR
@@ -26,6 +25,7 @@ WAV_CANDIDATES = [
 def sample_audio() -> tuple[np.ndarray, int]:
     for p in WAV_CANDIDATES:
         if p.exists():
+            sf = pytest.importorskip("soundfile", reason="sample WAV tests require the optional soundfile dependency")
             data, sr = sf.read(str(p), dtype="int16")
             if data.ndim > 1:
                 data = data.mean(axis=1).astype(np.int16)
