@@ -6,11 +6,34 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { Platform } from "react-native";
+import Constants from "expo-constants";
 import { CaptionMessage, DeviceInfo } from "@roundtable/protocol";
 import { ExtendedCaptionMessage } from "../components/CaptionLine";
 import { ConnectionStatus, RoundtableClient } from "../net/ws";
 import { createAudioSource } from "../audio";
 import { updateCaptions } from "./captions";
+
+const getDefaultServerUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_SERVER_URL) {
+    return process.env.EXPO_PUBLIC_SERVER_URL;
+  }
+  if (Platform.OS !== "web") {
+    const hostUri =
+      Constants.expoConfig?.hostUri ||
+      (Constants as any).manifest2?.extra?.expoGo?.debuggerHost ||
+      (Constants as any).manifest?.debuggerHost;
+    if (hostUri) {
+      const host = hostUri.split(":")[0];
+      if (host) {
+        return `http://${host}:8000`;
+      }
+    }
+  }
+  return "http://localhost:8000";
+};
+
+const DEFAULT_SERVER_URL = getDefaultServerUrl();
 
 interface SessionContextType {
   sessionCode: string;
@@ -54,9 +77,6 @@ interface SessionContextType {
 }
 
 const SessionContext = createContext<SessionContextType | null>(null);
-
-const DEFAULT_SERVER_URL =
-  process.env.EXPO_PUBLIC_SERVER_URL || "http://localhost:8000";
 
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -120,10 +140,22 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  const getEffectiveServerUrl = useCallback((url?: string): string => {
+    let candidate = (url || serverUrl || "").trim().replace(/\/+$/, "");
+    if (!candidate || (Platform.OS !== "web" && (candidate.includes("localhost") || candidate.includes("127.0.0.1")))) {
+      const detected = getDefaultServerUrl();
+      if (detected && !detected.includes("localhost") && !detected.includes("127.0.0.1")) {
+        return detected;
+      }
+      return "http://192.168.1.3:8000";
+    }
+    return candidate;
+  }, [serverUrl]);
+
   // Create session on backend REST
   const createSessionOnBackend = async (roomName?: string): Promise<string> => {
     try {
-      const base = serverUrl.trim().replace(/\/+$/, "");
+      const base = getEffectiveServerUrl();
       const res = await fetch(`${base}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -151,7 +183,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
     code: string
   ): Promise<{ exists: boolean; roster: DeviceInfo[] }> => {
     try {
-      const base = serverUrl.trim().replace(/\/+$/, "");
+      const base = getEffectiveServerUrl();
       const res = await fetch(`${base}/sessions/${code}`);
       if (res.status === 404) return { exists: false, roster: [] };
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -187,8 +219,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         audioSourceRef.current = null;
       }
 
+      const effectiveUrl = getEffectiveServerUrl();
+
       const client = new RoundtableClient({
-        serverUrl,
+        serverUrl: effectiveUrl,
         sessionId: code,
         name: participantName,
         onStatusChange: (newStatus) => setStatus(newStatus),
@@ -234,7 +268,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         showToast(e instanceof Error ? e.message : "Audio capture could not start.");
       });
     },
-    [handleIncomingCaption, serverUrl, showToast]
+    [getEffectiveServerUrl, handleIncomingCaption, showToast]
   );
 
   // Leave session

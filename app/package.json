@@ -15,6 +15,7 @@
     "@expo/vector-icons": "^15.0.2",
     "@roundtable/protocol": "*",
     "expo": "^57.0.0",
+    "expo-audio": "~57.0.5",
     "expo-constants": "~57.0.20",
     "expo-keep-awake": "~57.0.2",
     "expo-linking": "~57.0.11",

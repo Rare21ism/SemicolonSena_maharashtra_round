@@ -148,13 +148,13 @@ export class RoundtableClient {
         break;
 
       case "pong": {
-        const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-        const rtt = now - msg.t0;
+        const now = Date.now();
+        const rtt = Math.max(0, now - msg.t0);
         // Estimated clock offset: server_time - client_time_at_midpoint
         const offset = msg.server_ts_ms - (msg.t0 + rtt / 2.0);
-        this.rttMs = rtt;
-        this.clockOffsetMs = offset;
-        this.options.onClockSync?.(offset, rtt);
+        this.rttMs = Math.round(rtt);
+        this.clockOffsetMs = Math.round(offset);
+        this.options.onClockSync?.(this.clockOffsetMs, this.rttMs);
         break;
       }
 
@@ -173,7 +173,7 @@ export class RoundtableClient {
     // Send ping every 2 seconds
     this.pingTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+        const t0 = Date.now();
         const pingMsg: ClientMessage = { type: "ping", t0 };
         this.ws.send(JSON.stringify(pingMsg));
       }
