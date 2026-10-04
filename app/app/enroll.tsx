@@ -59,6 +59,66 @@ export default function VoiceEnrollmentScreen() {
       effectiveUrl = "http://192.168.1.3:8000";
     }
 
+    if (Platform.OS !== "web") {
+      try {
+        const {
+          AudioModule,
+          RecordingPresets,
+          setAudioModeAsync,
+          requestRecordingPermissionsAsync,
+        } = await import("expo-audio");
+        const perm = await requestRecordingPermissionsAsync();
+        if (!perm.granted) {
+          throw new Error("Microphone permission is required.");
+        }
+        await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+
+        const recorder = new (AudioModule as any).AudioRecorder({
+          ...RecordingPresets.HIGH_QUALITY,
+          isMeteringEnabled: true,
+        });
+        nativeRecorderRef.current = recorder;
+        await recorder.prepareToRecordAsync();
+        recorder.record();
+
+        recordingRef.current = true;
+        setState("recording");
+
+        const meterInterval = setInterval(() => {
+          try {
+            const status = recorder.getStatus();
+            if (typeof status?.metering === "number") {
+              const normalized = Math.max(0, Math.min(1, (status.metering + 55) / 45));
+              setMicLevel(normalized);
+            }
+          } catch {}
+        }, 80);
+
+        const startedAt = performance.now();
+        while (performance.now() - startedAt < 5000) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          setCountdown(Math.max(0, Math.ceil(5 - (performance.now() - startedAt) / 1000)));
+        }
+
+        clearInterval(meterInterval);
+        recordingRef.current = false;
+        try {
+          await recorder.stop();
+          recordedUriRef.current = recorder.uri;
+        } catch {}
+
+        setVoiceEnrolled(true);
+        setState("captured");
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Microphone recording failed.";
+        setCaptureError(message);
+        setState("idle");
+        recordingRef.current = false;
+        return;
+      }
+    }
+
     try {
       const client = await new Promise<RoundtableClient>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("Could not connect to room server.")), 10000);

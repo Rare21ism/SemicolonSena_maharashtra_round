@@ -6,6 +6,7 @@ speaker attribution, and crosstalk rejection.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from pathlib import Path
 import numpy as np
 import pytest
@@ -14,7 +15,7 @@ from roundtable.ml.align import SessionAligner
 from roundtable.ml.energy import DeviceEnergyTracker, EnergyTracker, compute_dbfs
 from roundtable.ml.gate import AudioGate, GateConfig
 from roundtable.ml.lane import CaptionEvent
-from roundtable.ml.pipeline import RealPipeline
+from roundtable.ml.pipeline import RealPipeline, SessionStream
 
 WAV_CANDIDATES = [
     Path(__file__).resolve().parent.parent / "scripts" / "test_sample_16k.wav",
@@ -155,6 +156,7 @@ def test_audio_gate_overlap_detection():
         margin_db=3.0,
         hold_ms=200.0,
         min_on_ms=100.0,
+        overlap_mode="both",
     )
     gate = AudioGate(config=config)
 
@@ -173,6 +175,162 @@ def test_audio_gate_overlap_detection():
     assert res.is_overlap is True, "Should detect overlap when SNRs are within margin"
     assert res.device_open[1] is True
     assert res.device_open[2] is True
+
+
+def test_single_mode_sticky_switch_and_overlap_flag():
+    gate = AudioGate(config=GateConfig(
+        threshold_open_db=6.0,
+        margin_db=3.0,
+        min_on_ms=100.0,
+        overlap_mode="single",
+    ))
+    quiet = np.zeros(1600, dtype=np.int16)
+    for tick in range(8):
+        gate.process_tick(tick, tick * 100.0, (tick + 1) * 100.0, {1: quiet, 2: quiet})
+    low = (3000 * np.sin(2 * np.pi * 440 * np.arange(1600) / 16000)).astype(np.int16)
+    high = (9000 * np.sin(2 * np.pi * 440 * np.arange(1600) / 16000)).astype(np.int16)
+    result = gate.process_tick(8, 800.0, 900.0, {1: low, 2: high})
+    assert result.device_open == {1: False, 2: True}
+    assert result.is_overlap is True
+    assert np.all(result.device_pcms[1] == 0)
+    for tick in range(9, 14):
+        result = gate.process_tick(tick, tick * 100.0, (tick + 1) * 100.0, {1: high, 2: low})
+        if tick < 12:
+            assert result.device_open[2] is True
+    assert result.device_open == {1: True, 2: False}
+
+
+class FakeDeepgramWebsocket:
+    def __init__(self):
+        self.sent = []
+        self.messages = asyncio.Queue()
+
+    async def send(self, message):
+        self.sent.append(message)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        message = await self.messages.get()
+        if message is None:
+            raise StopAsyncIteration
+        return message
+
+    async def close(self):
+        await self.messages.put(None)
+
+
+@pytest.mark.asyncio
+async def test_session_deepgram_uses_one_stream_and_attributes_high_gain_lane():
+    gate = AudioGate(config=GateConfig(threshold_open_db=6.0, margin_db=3.0, overlap_mode="single"))
+    silence = np.zeros(1600, dtype=np.int16)
+    for tick in range(8):
+        gate.process_tick(tick, tick * 100.0, (tick + 1) * 100.0, {1: silence, 2: silence})
+    mixture = (5000 * np.sin(2 * np.pi * 330 * np.arange(1600) / 16000)).astype(np.int16)
+    websocket = FakeDeepgramWebsocket()
+    opens = []
+
+    async def connector(url, **kwargs):
+        opens.append(url)
+        return websocket
+
+    emitted = []
+    async def emit(caption):
+        emitted.append(caption)
+
+    session = SessionStream("test-key", emit, connector=connector)
+    for tick in range(8, 11):
+        result = gate.process_tick(tick, tick * 100.0, (tick + 1) * 100.0, {
+            1: (mixture * 0.45).astype(np.int16),
+            2: mixture,
+        })
+        selected = result.dominant_device
+        assert selected == 2
+        await session.feed_tick(result.device_pcms[selected], tick * 100.0, selected,
+                                result.device_metrics[selected].snr_db, True)
+    await session._handle_result({
+        "start": 0.0, "duration": 0.3, "is_final": False,
+        "channel": {"alternatives": [{"transcript": "same audio caption"}]},
+    })
+    assert len(opens) == 1
+    assert len(emitted) == 1
+    assert emitted[0].speaker_id == 2
+    assert len({caption.text for caption in emitted}) == len(emitted)
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_session_deepgram_speech_final_starts_new_line_for_next_speaker():
+    websocket = FakeDeepgramWebsocket()
+    async def connector(url, **kwargs):
+        return websocket
+
+    emitted = []
+    async def emit(caption):
+        emitted.append(caption)
+
+    session = SessionStream("test-key", emit, connector=connector)
+    pcm = np.full(1600, 1000, dtype=np.int16)
+    for tick in range(3):
+        await session.feed_tick(pcm, tick * 100.0, 1, 12.0, False)
+    await session._handle_result({
+        "start": 0.0, "duration": 0.3, "is_final": True, "speech_final": True,
+        "channel": {"alternatives": [{"transcript": "speaker one"}]},
+    })
+    for tick in range(3, 13):
+        await session.feed_tick(np.zeros_like(pcm), tick * 100.0, None, None, False)
+    for tick in range(13, 16):
+        await session.feed_tick(pcm, tick * 100.0, 2, 15.0, False)
+    await session._handle_result({
+        "start": 1.3, "duration": 0.3, "is_final": True, "speech_final": True,
+        "channel": {"alternatives": [{"transcript": "speaker two"}]},
+    })
+    assert [caption.speaker_id for caption in emitted] == [1, 2]
+    assert emitted[0].line_id != emitted[1].line_id
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_same_mixed_audio_caption_suppressed_on_lower_snr_lane():
+    gate = AudioGate(config=GateConfig(threshold_open_db=6.0, margin_db=3.0, overlap_mode="single"))
+    quiet = np.zeros(1600, dtype=np.int16)
+    for tick in range(8):
+        gate.process_tick(tick, tick * 100.0, (tick + 1) * 100.0, {1: quiet, 2: quiet})
+    mixture = (5000 * np.sin(2 * np.pi * 330 * np.arange(1600) / 16000)).astype(np.int16)
+    result = gate.process_tick(8, 800.0, 900.0, {
+        1: (mixture * 0.45).astype(np.int16),
+        2: mixture,
+    })
+    winner = max(result.device_metrics, key=lambda device: result.device_metrics[device].snr_db)
+    assert winner == 2
+    assert [device for device, opened in result.device_open.items() if opened] == [winner]
+
+    pipeline = RealPipeline.__new__(RealPipeline)
+    pipeline._closed = False
+    pipeline.asr_backend = "local"
+    pipeline._queue = asyncio.Queue()
+    pipeline._caption_history = {}
+    pipeline._caption_snr = {1: deque([(1000.0, 8.0)]), 2: deque([(1000.0, 19.0)])}
+    pipeline._dedup_similarity = 0.6
+    await pipeline._emit_caption(CaptionEvent(
+        line_id="low-line", rev=1, speaker_id=1, text="the same spoken sentence",
+        state="draft", t_start=900.0, t_end=1100.0,
+    ))
+    await pipeline._emit_caption(CaptionEvent(
+        line_id="high-line", rev=1, speaker_id=2, text="the same spoken sentence",
+        state="draft", t_start=900.0, t_end=1100.0,
+    ))
+    emitted = [pipeline._queue.get_nowait() for _ in range(pipeline._queue.qsize())]
+    latest_by_line = {}
+    for item in emitted:
+        if item.line_id not in latest_by_line or item.rev > latest_by_line[item.line_id].rev:
+            latest_by_line[item.line_id] = item
+    assert [(item.speaker_id, item.text) for item in latest_by_line.values() if item.text] == [(2, "the same spoken sentence")]
+    speaker_by_line = {}
+    for item in emitted:
+        speaker_by_line.setdefault(item.line_id, set()).add(item.speaker_id)
+    assert all(len(speakers) == 1 for speakers in speaker_by_line.values())
 
 
 @pytest.mark.asyncio

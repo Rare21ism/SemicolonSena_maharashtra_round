@@ -17,6 +17,10 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import logging
 import os
+import json
+import statistics
+import urllib.parse
+from pathlib import Path
 import string
 import time
 from typing import Awaitable, Callable, Optional
@@ -27,6 +31,14 @@ from roundtable.ml.engine import FinalASR, StreamingASR
 from roundtable.protocol import CaptionMessage
 
 logger = logging.getLogger("roundtable.ml.lane")
+
+
+def _pcm_is_silent(pcm: np.ndarray) -> bool:
+    return bool(np.all(pcm == 0))
+
+
+def _pcm_chunks_to_bytes(chunks: list[np.ndarray]) -> bytes:
+    return np.concatenate(chunks).astype(np.int16, copy=False).tobytes()
 
 
 class CaptionEvent(CaptionMessage):
@@ -506,8 +518,22 @@ class Lane:
         head_padding_ms: Optional[float] = None,
         tail_padding_ms: Optional[float] = None,
         gate_open_threshold_db: float = 8.0,
+        asr_backend: str = "local",
     ):
         self.device_idx = device_idx
+        self.asr_backend = asr_backend
+        self.deepgram_key = os.getenv("DEEPGRAM_API_KEY")
+        self.deepgram_ws = None
+        self.deepgram_task = None
+        self.deepgram_pcm: list[np.ndarray] = []
+        self.deepgram_closed_ms = 0.0
+        self.deepgram_retry_at = 0.0
+        self.deepgram_retry_s = 1.0
+        self.deepgram_line_id = f"line-{uuid.uuid4().hex[:8]}"
+        self.deepgram_rev = 0
+        self.deepgram_start_ms = 0.0
+        self.deepgram_end_ms = 0.0
+        self.deepgram_started_perf = 0.0
         self.emit = emit
         self.streaming_asr = streaming_asr
         self.whisper_queue = whisper_queue
@@ -582,6 +608,99 @@ class Lane:
         overlap: bool = False,
         snr_db: Optional[float] = None,
     ) -> None:
+        if self.asr_backend == "deepgram_lanes" and self.deepgram_key:
+            try:
+                await self._feed_deepgram(pcm, t_start_ms, overlap)
+                return
+            except Exception:
+                logger.exception("[Deepgram lane=%s] stream failed; falling back to local ASR", self.device_idx)
+                self.asr_backend = "local"
+                if self.deepgram_ws:
+                    try:
+                        await self.deepgram_ws.close()
+                    except Exception:
+                        pass
+                for buffered in self.deepgram_pcm:
+                    await self._feed_local(buffered, self.deepgram_start_ms)
+                self.deepgram_pcm.clear()
+        await self._feed_local(pcm, t_start_ms, overlap, snr_db)
+
+    async def _feed_deepgram(self, pcm: np.ndarray, t_start_ms: float, overlap: bool = False) -> None:
+        silent = await asyncio.get_running_loop().run_in_executor(self._executor, _pcm_is_silent, pcm)
+        if silent:
+            self.deepgram_closed_ms += len(pcm) / 16.0
+            if self.deepgram_ws:
+                await self.deepgram_ws.send(pcm.astype(np.int16, copy=False).tobytes())
+            if self.deepgram_ws and self.deepgram_closed_ms >= 3000:
+                await self.deepgram_ws.send(json.dumps({"type": "CloseStream"}))
+                await self.deepgram_ws.close()
+                self.deepgram_ws = None
+                self.deepgram_task = None
+            return
+        self.deepgram_closed_ms = 0.0
+        if not self.deepgram_pcm:
+            self.deepgram_start_ms = t_start_ms
+        self.deepgram_end_ms = t_start_ms + len(pcm) / 16.0
+        self.deepgram_pcm.append(pcm.copy())
+        if sum(map(len, self.deepgram_pcm)) < 4800:
+            return
+        if self.deepgram_ws is None:
+            if time.monotonic() < self.deepgram_retry_at:
+                return
+            from websockets.asyncio.client import connect
+            from websockets.exceptions import InvalidStatus
+            names_path = Path(__file__).resolve().parents[3] / "models" / "names.txt"
+            names = [n.strip() for n in names_path.read_text(encoding="utf-8").splitlines() if n.strip()] if names_path.exists() else []
+            params = {"model": "nova-3", "language": "en-IN", "encoding": "linear16", "sample_rate": "16000", "channels": "1", "interim_results": "true", "endpointing": "300", "smart_format": "true", "punctuate": "true"}
+            for name in names:
+                params.setdefault("keyterm", [])
+                params["keyterm"].append(name)
+            url = "wss://api.deepgram.com/v1/listen?" + urllib.parse.urlencode(params, doseq=True)
+            try:
+                self.deepgram_ws = await connect(url, additional_headers={"Authorization": f"Token {self.deepgram_key}"})
+            except InvalidStatus as exc:
+                if "en-IN" not in str(exc):
+                    raise
+                params["language"] = "en"
+                url = "wss://api.deepgram.com/v1/listen?" + urllib.parse.urlencode(params, doseq=True)
+                self.deepgram_ws = await connect(url, additional_headers={"Authorization": f"Token {self.deepgram_key}"})
+            self.deepgram_line_id = f"line-{uuid.uuid4().hex[:8]}"
+            self.deepgram_rev = 0
+            self.deepgram_started_perf = time.perf_counter()
+            self.deepgram_task = asyncio.create_task(self._read_deepgram())
+            self.deepgram_retry_s = 1.0
+        payload = await asyncio.get_running_loop().run_in_executor(self._executor, _pcm_chunks_to_bytes, self.deepgram_pcm)
+        await self.deepgram_ws.send(payload)
+        self.deepgram_pcm.clear()
+
+    async def _read_deepgram(self) -> None:
+        try:
+            async for message in self.deepgram_ws:
+                result = json.loads(message)
+                alternatives = result.get("channel", {}).get("alternatives", [])
+                text = alternatives[0].get("transcript", "").strip() if alternatives else ""
+                if not text:
+                    continue
+                final = bool(result.get("is_final") or result.get("speech_final"))
+                self.deepgram_rev += 1
+                await self.emit(CaptionEvent(line_id=self.deepgram_line_id, rev=self.deepgram_rev, speaker_id=self.device_idx, text=text, state="final" if final else "draft", t_start=self.deepgram_start_ms, t_end=self.deepgram_end_ms))
+                if result.get("speech_final"):
+                    logger.info("[Deepgram] end-of-speech-to-final_ms=%.1f lane=%s", (time.perf_counter() - self.deepgram_started_perf) * 1000, self.device_idx)
+                    self.deepgram_line_id = f"line-{uuid.uuid4().hex[:8]}"
+                    self.deepgram_rev = 0
+        except Exception:
+            logger.exception("[Deepgram lane=%s] receive failed", self.device_idx)
+            self.deepgram_retry_at = time.monotonic() + self.deepgram_retry_s
+            self.deepgram_retry_s = min(self.deepgram_retry_s * 2, 30.0)
+            self.deepgram_ws = None
+
+    async def _feed_local(
+        self,
+        pcm: np.ndarray,
+        t_start_ms: float,
+        overlap: bool = False,
+        snr_db: Optional[float] = None,
+    ) -> None:
         """
         Feeds a ~100ms 16kHz PCM chunk into the lane.
         Runs inference off-thread in ThreadPoolExecutor.
@@ -593,13 +712,13 @@ class Lane:
             self.snr_buffer.append(snr_db)
 
         # Do not start an utterance or buffer zeros if lane is idle and receives pure zeros
-        if not self.has_active_utterance and np.all(pcm == 0):
+        loop = asyncio.get_running_loop()
+        silent = await loop.run_in_executor(self._executor, _pcm_is_silent, pcm)
+        if not self.has_active_utterance and silent:
             return
 
         if overlap:
             self.current_utterance_has_overlap = True
-
-        loop = asyncio.get_running_loop()
 
         # Sherpa padding: at utterance start feed 300 ms of zeros before real audio
         if not self.head_padding_fed and self.head_padding_ms > 0:
@@ -637,7 +756,7 @@ class Lane:
 
         # 1. While a lane has an active utterance and no whisper text yet,
         # emit a caption with state="draft", text="" so the UI shows speaker chip + animated "..."
-        if not self.empty_draft_emitted and (len(pcm) > 0 and not np.all(pcm == 0)):
+        if not self.empty_draft_emitted and len(pcm) > 0 and not silent:
             self.rev += 1
             self.empty_draft_emitted = True
             empty_draft = CaptionEvent(
@@ -664,9 +783,9 @@ class Lane:
                 self.last_whisper_draft_perf = now_perf
                 self.last_whisper_draft_ms = t_start_ms
                 max_rolling_samples = 96000  # 6.0s at 16kHz
-                all_pcm = np.concatenate(self.pcm_buffer)
+                all_pcm = await loop.run_in_executor(self._executor, np.concatenate, self.pcm_buffer)
                 rolling_pcm = all_pcm[-max_rolling_samples:] if len(all_pcm) > max_rolling_samples else all_pcm
-                avg_snr = float(np.mean(self.snr_buffer)) if self.snr_buffer else 0.0
+                avg_snr = statistics.fmean(self.snr_buffer) if self.snr_buffer else 0.0
                 self.rev += 1
                 job = WhisperJob(
                     line_id=self.current_line_id,
@@ -690,7 +809,7 @@ class Lane:
         force_endpoint = buffered_duration_s >= self.max_utterance_duration_s
         if is_endpoint or force_endpoint:
             if self.pcm_buffer:
-                avg_snr = float(np.mean(self.snr_buffer)) if self.snr_buffer else 0.0
+                avg_snr = statistics.fmean(self.snr_buffer) if self.snr_buffer else 0.0
                 # Drop short utterances (< 400 ms) as per Requirement 3
                 if buffered_duration_s < 0.400:
                     logger.info(
@@ -738,7 +857,7 @@ class Lane:
                 # In all modes, sherpa text is NEVER emitted as a caption when whisper is enabled.
                 # Whisper produces the final pass on the endpointed segment.
                 if self.enable_whisper and self.whisper_queue:
-                    utterance_pcm = np.concatenate(self.pcm_buffer)
+                    utterance_pcm = await loop.run_in_executor(self._executor, np.concatenate, self.pcm_buffer)
                     self.rev += 1
                     job = WhisperJob(
                         line_id=self.current_line_id,
@@ -780,7 +899,7 @@ class Lane:
             buffered_samples = sum(len(c) for c in self.pcm_buffer)
             buffered_duration_s = buffered_samples / 16000.0
             t_end_ms = self.utterance_start_ms + (buffered_samples / 16.0)
-            avg_snr = float(np.mean(self.snr_buffer)) if self.snr_buffer else 0.0
+            avg_snr = statistics.fmean(self.snr_buffer) if self.snr_buffer else 0.0
 
             # Discard short utterances (< 400 ms) as per Requirement 3
             if buffered_duration_s < 0.400:
@@ -827,7 +946,7 @@ class Lane:
             endpoint_to_sherpa_ms = (time.perf_counter() - endpoint_perf) * 1000.0
 
             if self.enable_whisper and self.whisper_queue:
-                utterance_pcm = np.concatenate(self.pcm_buffer)
+                utterance_pcm = await loop.run_in_executor(self._executor, np.concatenate, self.pcm_buffer)
                 self.rev += 1
                 job = WhisperJob(
                     line_id=self.current_line_id,
@@ -863,6 +982,10 @@ class Lane:
             self._reset_utterance()
 
     def close(self):
+        if self.deepgram_task:
+            self.deepgram_task.cancel()
+        if self.deepgram_ws:
+            asyncio.create_task(self.deepgram_ws.close())
         self._executor.shutdown(wait=False)
 
 
