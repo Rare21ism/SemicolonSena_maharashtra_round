@@ -27,7 +27,6 @@ export default function MeetingLobbyScreen() {
     myDeviceIdx,
     connectToSession,
     toastMessage,
-    showToast,
     clearToast,
   } = useSession();
 
@@ -70,16 +69,17 @@ export default function MeetingLobbyScreen() {
             onPress={handleLeave}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="close" size={20} color={colors.textSecondary} />
+            <Ionicons name="close" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Meeting Lobby</Text>
+          <Text style={styles.headerTitle}>CONVERSATION LOBBY</Text>
           <View style={{ width: 32 }} />
         </View>
 
-        {/* Meeting Banner (Section 13) */}
+        {/* Room Banner */}
         <View style={styles.roomBanner}>
+          <Text style={styles.bannerKicker}>ROOM READY</Text>
           <Text style={styles.sessionTitle} numberOfLines={1}>
-            {sessionName || "Team Discussion"}
+            {sessionName || "Group Discussion"}
           </Text>
 
           <TouchableOpacity
@@ -92,22 +92,23 @@ export default function MeetingLobbyScreen() {
             <Ionicons
               name={copied ? "checkmark-circle" : "copy-outline"}
               size={16}
-              color={copied ? colors.success : colors.primaryLight}
+              color={copied ? colors.success : colors.textMuted}
             />
           </TouchableOpacity>
 
           <Text style={styles.roomNotice}>
-            Nearby devices on the table will automatically coordinate audio
-            fusion when the conversation starts.
+            Place your phones or laptops on the table. Audio from all connected devices will stream into a unified live transcript.
           </Text>
         </View>
 
         {/* Participant Roster Section */}
         <View style={styles.rosterSection}>
           <View style={styles.rosterHeader}>
-            <Text style={styles.rosterLabel}>PARTICIPANTS</Text>
+            <Text style={styles.rosterLabel}>CONNECTED PEOPLE</Text>
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{roster.length} connected</Text>
+              <Text style={styles.countText}>
+                {roster.length} {roster.length === 1 ? "person" : "people"}
+              </Text>
             </View>
           </View>
 
@@ -119,7 +120,7 @@ export default function MeetingLobbyScreen() {
                   key={dev.device_idx}
                   device={dev}
                   isSelf={isSelf}
-                  statusText={isSelf ? "Microphone Ready" : "Ready"}
+                  statusText={isSelf ? "Microphone active" : "Connected"}
                   connectionQuality="good"
                 />
               );
@@ -131,10 +132,10 @@ export default function MeetingLobbyScreen() {
         <View style={styles.actionSection}>
           {isHost ? (
             <Button
-              title="Start Meeting"
+              title="Start Live Conversation"
               variant="primary"
               size="lg"
-              icon={<Ionicons name="play" size={18} color="#FFFFFF" />}
+              icon={<Ionicons name="play" size={18} color="#FBF9F5" />}
               onPress={handleStartMeeting}
               style={styles.actionBtn}
             />
@@ -142,20 +143,20 @@ export default function MeetingLobbyScreen() {
             <View style={styles.waitingNoticeBox}>
               <View style={styles.waitingDot} />
               <Text style={styles.waitingNoticeText}>
-                Waiting for host to start the meeting...
+                Waiting for host to start conversation…
               </Text>
               <Button
-                title="Enter Meeting Now"
+                title="Enter Live View"
                 variant="secondary"
                 size="md"
                 onPress={handleStartMeeting}
-                style={{ marginTop: 12 }}
+                style={{ marginTop: 14 }}
               />
             </View>
           )}
 
           <Button
-            title="Leave Meeting"
+            title="Leave Lobby"
             variant="ghost"
             size="md"
             onPress={handleLeave}
@@ -172,10 +173,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgPrimary,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
     paddingBottom: 48,
-    maxWidth: 620,
+    maxWidth: 580,
     width: "100%",
     alignSelf: "center",
   },
@@ -183,66 +184,82 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
   backButton: {
-    padding: 6,
+    padding: 8,
     borderRadius: radii.sm,
     backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: 12,
+    fontWeight: "800",
     color: colors.textPrimary,
+    letterSpacing: 2,
   },
   roomBanner: {
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     padding: spacing.lg,
-    alignItems: "center",
-    marginBottom: 20,
+    alignItems: "flex-start",
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  bannerKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 4,
   },
   sessionTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "800",
     color: colors.textPrimary,
-    marginBottom: 12,
+    marginBottom: 14,
+    letterSpacing: -0.5,
   },
   codePill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(99, 102, 241, 0.12)",
-    borderWidth: 1.5,
-    borderColor: "rgba(99, 102, 241, 0.4)",
+    backgroundColor: colors.bgSecondary,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
     paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: radii.full,
-    gap: 8,
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    borderRadius: radii.md,
+    gap: 10,
+    marginBottom: 16,
   },
   codeLabel: {
     fontSize: 10,
-    fontWeight: "800",
-    color: colors.primaryLight,
-    letterSpacing: 1,
+    fontWeight: "700",
+    color: colors.textMuted,
+    letterSpacing: 1.2,
   },
   codeText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "800",
     color: colors.textPrimary,
     fontFamily: "monospace",
     letterSpacing: 2,
   },
   roomNotice: {
-    fontSize: 12,
-    color: colors.textMuted,
-    textAlign: "center",
-    maxWidth: 380,
-    lineHeight: 18,
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 22,
   },
   rosterSection: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   rosterHeader: {
     flexDirection: "row",
@@ -254,11 +271,11 @@ const styles = StyleSheet.create({
     ...typography.label,
   },
   countBadge: {
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    backgroundColor: colors.successBg,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.3)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderColor: "rgba(43, 97, 64, 0.2)",
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     borderRadius: radii.full,
   },
   countText: {
@@ -267,33 +284,34 @@ const styles = StyleSheet.create({
     color: colors.success,
   },
   participantList: {
-    gap: 6,
+    gap: 8,
   },
   actionSection: {
     gap: 12,
-    marginTop: 8,
   },
   actionBtn: {
     width: "100%",
   },
   waitingNoticeBox: {
     backgroundColor: colors.bgCard,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     padding: spacing.md,
     alignItems: "center",
+    width: "100%",
   },
   waitingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.warning,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   waitingNoticeText: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.textSecondary,
     textAlign: "center",
+    fontWeight: "500",
   },
 });

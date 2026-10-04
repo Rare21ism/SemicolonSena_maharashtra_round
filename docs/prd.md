@@ -29,7 +29,7 @@ Laptop (web) + Android phone + iPhone (mobile browser, native if time) join one 
 - UI: Join, Live screens work on desktop web and a phone browser. Captions update in place without flicker. Reconnect badge is accurate.
 - Capture: web mic yields clean 16 kHz int16 frames with correct headers on Chrome desktop, Android Chrome and iOS Safari. Native Android is a bonus.
 - Backend: protocol tests pass. 3+ devices in one session. fake_client.py runs clean. Captions broadcast to all clients.
-- ML: real pipeline (ROUNDTABLE_PIPELINE=real) passes fake_client.py and, on a recorded 2-speaker clip, gives correct text and correct speaker labels. Never blocks the event loop.
+- ML: the real pipeline passes fake_client.py and, on a recorded 2-speaker clip, gives correct text and correct speaker labels. Never blocks the event loop.
 
 ## Demo script and fallback
 - Script: 3 devices on the table, 2 to 3 people, a short scripted exchange, then one deliberate overlap.

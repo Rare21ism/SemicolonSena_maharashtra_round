@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,18 +15,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, radii, spacing, typography } from "../src/theme";
 import { Button } from "../src/components/Button";
 import { Input } from "../src/components/Input";
+import { RoundtableSpatialMotif } from "../src/components/RoundtableSpatialMotif";
 import { useSession } from "../src/state/SessionContext";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const {
-    name,
-    setName,
-    serverUrl,
-    setServerUrl,
-  } = useSession();
-
+  const { name, setName, serverUrl, setServerUrl } = useSession();
   const [showConfig, setShowConfig] = useState(false);
+  const viewportWidth = useWindowDimensions().width;
+  const isWide = viewportWidth >= 900;
+  const isCompact = viewportWidth < 520;
 
   const handleCreate = () => {
     router.push("/create");
@@ -36,97 +35,81 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-bgPrimary" style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.container}
       >
         <ScrollView
-          className="px-5 py-4 pb-12 max-w-[580px] w-full mx-auto"
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { width: Math.min(1120, viewportWidth), boxSizing: "border-box" },
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Top Brand Header */}
-          <View className="flex-row items-center justify-between mb-8" style={styles.topNav}>
-            <View className="flex-row items-center gap-2.5" style={styles.brandRow}>
-              <View className="w-8 h-8 rounded-lg bg-indigo-600 items-center justify-center shadow-lg" style={styles.logoBadge}>
-                <Ionicons name="radio" size={18} color="#FFFFFF" />
+          {/* Top Editorial Header */}
+          <View
+            style={[
+              styles.pageGutter,
+              { width: Math.max(0, Math.min(1120, viewportWidth) - 48) },
+            ]}
+          >
+        <View style={[styles.topNav, isCompact && styles.topNavCompact]}>
+            <View style={styles.brandRow}>
+              <View style={styles.logoBadge}>
+                <Ionicons name="mic-outline" size={18} color="#FBF9F5" />
               </View>
-              <Text className="text-xl font-extrabold text-textPrimary tracking-tight" style={styles.brandTitle}>Roundtable</Text>
+              <Text style={styles.brandTitle}>ROUNDTABLE</Text>
             </View>
-
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>LIVE SPEECH TRANSCRIPTION</Text>
+            </View>
           </View>
 
-          {/* Hero Section (Section 8) */}
-          <View className="items-center mb-8" style={styles.heroSection}>
-            <View className="bg-indigo-500/10 border border-indigo-500/25 px-3.5 py-1 rounded-full mb-3.5" style={styles.heroTag}>
-              <Text className="text-[10px] font-black text-indigo-400 tracking-widest" style={styles.heroTagText}>
-                REAL-TIME MULTI-DEVICE MEETING CAPTIONS
+          <View style={[styles.heroRow, isWide && styles.heroRowWide]}>
+            <View style={[styles.heroSection, isWide && styles.heroSectionWide]}>
+              <Text style={styles.kickerLabel}>GROUP CONVERSATION CAPTIONS</Text>
+              <Text
+                style={[
+                  styles.heroTitle,
+                  isWide && styles.heroTitleWide,
+                  isCompact && styles.heroTitleCompact,
+                ]}
+              >
+                {isCompact ? (
+                  <>EVERY VOICE.{"\n"}ONE{"\n"}CONVERSATION.</>
+                ) : (
+                  <>EVERY VOICE.{"\n"}ONE CONVERSATION.</>
+                )}
+              </Text>
+              <Text style={styles.heroSubtitle}>
+                Phones and laptops listen from around the room, bringing speech together in one shared, speaker-aware transcript.
               </Text>
             </View>
 
-            <Text className="text-3xl font-extrabold text-center text-textPrimary leading-tight mb-3" style={styles.heroTitle}>
-              Live captions that{"\n"}
-              <Text className="text-indigo-400" style={styles.heroGradient}>know who's speaking.</Text>
-            </Text>
-
-            <Text className="text-sm text-center text-textMuted leading-relaxed max-w-[460px]" style={styles.heroSubtitle}>
-              One conversation. Multiple devices. One clearer transcript.
-              Roundtable combines audio from nearby phones and laptops to create
-              low-latency, speaker-attributed subtitles for real meetings.
-            </Text>
-          </View>
-
-          {/* Interactive Multi-Device Array Illustration */}
-          <View className="w-full bg-bgCard border border-borderDefault rounded-2xl p-6 items-center mb-8 relative overflow-hidden" style={styles.illustrationCard}>
-            <View style={styles.circleOrbitOuter}>
-              <View style={styles.circleOrbitInner}>
-                <View style={styles.centerTable}>
-                  <Ionicons name="chatbubbles" size={24} color={colors.primaryLight} />
-                  <Text style={styles.centerTableText}>FUSION</Text>
-                </View>
-              </View>
-
-              {/* Surrounding Node 1: Jim */}
-              <View style={[styles.nodeBubble, styles.nodeLaptop]}>
-                <Ionicons name="laptop-outline" size={15} color="#8B5CF6" />
-                <Text style={styles.nodeText}>Jim (Laptop)</Text>
-              </View>
-
-              {/* Surrounding Node 2: Pam */}
-              <View style={[styles.nodeBubble, styles.nodePhoneA]}>
-                <Ionicons name="phone-portrait-outline" size={15} color="#0284C7" />
-                <Text style={styles.nodeText}>Pam (Phone)</Text>
-              </View>
-
-              {/* Surrounding Node 3: Dwight */}
-              <View style={[styles.nodeBubble, styles.nodePhoneB]}>
-                <Ionicons name="phone-portrait-outline" size={15} color="#10B981" />
-                <Text style={styles.nodeText}>Dwight (Phone)</Text>
-              </View>
-            </View>
-
-            <View style={styles.liveCaptionSnippet}>
-              <View style={styles.snippetDot} />
-              <Text style={styles.snippetSpeaker}>MICHAEL: </Text>
-              <Text style={styles.snippetText} numberOfLines={1}>
-                "HEEELOO! We are going to crush this quarter."
-              </Text>
+            <View style={[styles.motifContainer, isWide && styles.motifContainerWide]}>
+              <RoundtableSpatialMotif />
             </View>
           </View>
 
-          {/* User Display Name & Primary Actions Card */}
-          <View className="w-full bg-bgCard border border-borderDefault rounded-2xl p-6 mb-6 shadow-xl" style={styles.actionCard}>
+          {/* Action Card: Display Name & Actions */}
+          <View
+            style={[
+              styles.actionCard,
+              { width: Math.max(0, Math.min(650, viewportWidth - 96)) },
+            ]}
+          >
             <Input
-              label="YOUR DISPLAY NAME"
-              placeholder="e.g. Jim, Pam, Dwight"
+              label="YOUR NAME"
+              placeholder="Enter your full name"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
               icon={
                 <Ionicons
                   name="person-outline"
-                  size={18}
+                  size={16}
                   color={colors.textMuted}
                 />
               }
@@ -134,26 +117,28 @@ export default function HomeScreen() {
 
             <View style={styles.buttonStack}>
               <Button
-                title="Create Meeting"
+                title="Start a Conversation"
                 variant="primary"
                 size="lg"
-                icon={<Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />}
+                icon={<Ionicons name="add" size={18} color="#FBF9F5" />}
+                disabled={!name.trim()}
                 onPress={handleCreate}
               />
 
               <Button
-                title="Join Meeting"
+                title="Join a Conversation"
                 variant="secondary"
                 size="lg"
-                icon={<Ionicons name="enter-outline" size={20} color={colors.textPrimary} />}
+                icon={<Ionicons name="arrow-forward-outline" size={16} color={colors.textPrimary} />}
                 onPress={handleJoin}
               />
             </View>
 
-            {/* Server Config Toggle */}
+            {/* Server Settings Toggle (Discreet) */}
             <TouchableOpacity
               style={styles.toggleConfig}
               onPress={() => setShowConfig(!showConfig)}
+              activeOpacity={0.7}
             >
               <Ionicons
                 name={showConfig ? "chevron-up" : "chevron-down"}
@@ -161,14 +146,14 @@ export default function HomeScreen() {
                 color={colors.textMuted}
               />
               <Text style={styles.toggleConfigText}>
-                {showConfig ? "Hide server settings" : "Configure server endpoint"}
+                {showConfig ? "Hide server endpoint" : "Server endpoint configuration"}
               </Text>
             </TouchableOpacity>
 
             {showConfig && (
               <View style={styles.configArea}>
                 <Input
-                  label="BACKEND URL"
+                  label="SERVER ENDPOINT"
                   value={serverUrl}
                   onChangeText={setServerUrl}
                   autoCapitalize="none"
@@ -179,37 +164,30 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {/* Feature Highlights Grid */}
-          <View style={styles.featuresRow}>
-            <View style={styles.featureItem}>
-              <View style={[styles.featureIcon, { backgroundColor: "rgba(139, 92, 246, 0.15)" }]}>
-                <Ionicons name="hardware-chip-outline" size={18} color="#8B5CF6" />
+          <View style={styles.storySection}>
+            <Text style={styles.storyKicker}>FROM ROOM TO TRANSCRIPT</Text>
+            <Text style={styles.storyTitle}>One conversation, heard together.</Text>
+            <View style={[styles.steps, isWide && styles.stepsWide]}>
+              <View style={styles.stepItem}>
+                <Text style={styles.stepNumber}>01</Text>
+                <Text style={styles.stepTitle}>Bring a device</Text>
+                <Text style={styles.stepCopy}>Each person joins from a phone or laptop.</Text>
               </View>
-              <Text style={styles.featureTitle}>No Special Hardware</Text>
-              <Text style={styles.featureDesc}>
-                Uses everyday laptop and phone microphones placed on the table.
-              </Text>
-            </View>
-
-            <View style={styles.featureItem}>
-              <View style={[styles.featureIcon, { backgroundColor: "rgba(14, 165, 233, 0.15)" }]}>
-                <Ionicons name="people-circle-outline" size={18} color="#0EA5E9" />
+              <View style={styles.stepItem}>
+                <Text style={styles.stepNumber}>02</Text>
+                <Text style={styles.stepTitle}>Let the room speak</Text>
+                <Text style={styles.stepCopy}>Connected microphones contribute live audio.</Text>
               </View>
-              <Text style={styles.featureTitle}>Speaker Attributed</Text>
-              <Text style={styles.featureDesc}>
-                Separates simultaneous speech and attributes every sentence to who spoke it.
-              </Text>
-            </View>
-
-            <View style={styles.featureItem}>
-              <View style={[styles.featureIcon, { backgroundColor: "rgba(16, 185, 129, 0.15)" }]}>
-                <Ionicons name="flash-outline" size={18} color="#10B981" />
+              <View style={styles.stepItem}>
+                <Text style={styles.stepNumber}>03</Text>
+                <Text style={styles.stepTitle}>Follow along</Text>
+                <Text style={styles.stepCopy}>Speech appears as shared captions with speaker labels.</Text>
               </View>
-              <Text style={styles.featureTitle}>Streaming Drafts</Text>
-              <Text style={styles.featureDesc}>
-                Instant partial captions stream in real time, followed by verified final text.
-              </Text>
             </View>
+            <Text style={styles.useCases}>
+              TEAM DISCUSSIONS <Text style={styles.useCaseDivider}>·</Text> CLASSROOMS <Text style={styles.useCaseDivider}>·</Text> GROUP STUDY
+            </Text>
+          </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -226,17 +204,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: 48,
-    maxWidth: 720,
-    width: "100%",
+    paddingVertical: 28,
+    paddingBottom: 72,
+    maxWidth: 1120,
     alignSelf: "center",
+  },
+  pageGutter: {
+    paddingHorizontal: 24,
   },
   topNav: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 40,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  topNavCompact: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 12,
     marginBottom: 28,
   },
   brandRow: {
@@ -245,175 +234,120 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   logoBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: radii.md,
+    width: 32,
+    height: 32,
+    borderRadius: radii.sm,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
   },
   brandTitle: {
-    ...typography.h3,
-    letterSpacing: -0.3,
-  },
-  heroSection: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  heroTag: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: radii.full,
-    marginBottom: 12,
-  },
-  heroTagText: {
-    fontSize: 11,
+    fontSize: 16,
     fontWeight: "800",
-    color: colors.textSecondary,
-    letterSpacing: 1,
+    color: colors.textPrimary,
+    letterSpacing: 2,
   },
-  heroTitle: {
-    ...typography.h1,
-    textAlign: "center",
-    lineHeight: 40,
-    marginBottom: 12,
-  },
-  heroGradient: {
-    color: colors.primaryLight,
-  },
-  heroSubtitle: {
-    ...typography.body,
-    textAlign: "center",
-    maxWidth: 520,
-    lineHeight: 24,
-  },
-  illustrationCard: {
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-    position: "relative",
-    overflow: "hidden",
-  },
-  circleOrbitOuter: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-    marginVertical: 12,
-  },
-  circleOrbitInner: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.35)",
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  centerTable: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  centerTableText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.primaryLight,
-    letterSpacing: 1,
-  },
-  nodeBubble: {
-    position: "absolute",
+  liveBadge: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
     backgroundColor: colors.bgSecondary,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    gap: 5,
+    maxWidth: "100%",
   },
-  nodeLaptop: {
-    top: -10,
-    alignSelf: "center",
-  },
-  nodePhoneA: {
-    bottom: 20,
-    left: -15,
-  },
-  nodePhoneB: {
-    bottom: 20,
-    right: -15,
-  },
-  nodeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.textSecondary,
-  },
-  liveCaptionSnippet: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(10, 15, 29, 0.9)",
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: radii.full,
-    marginTop: 8,
-    maxWidth: "95%",
-  },
-  snippetDot: {
+  liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: colors.success,
-    marginRight: 6,
   },
-  snippetSpeaker: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#F97316",
-  },
-  snippetText: {
-    fontSize: 12,
+  liveBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
     color: colors.textSecondary,
+    letterSpacing: 1,
+  },
+  heroSection: {
+    alignItems: "flex-start",
+    marginBottom: 24,
+    width: "100%",
+  },
+  heroRow: {
+    width: "100%",
+  },
+  heroRowWide: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 48,
+    marginTop: 18,
+  },
+  heroSectionWide: {
     flex: 1,
+    marginBottom: 0,
+    width: "auto",
+  },
+  kickerLabel: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 8,
+  },
+  heroTitle: {
+    ...typography.display1,
+    textAlign: "left",
+    marginBottom: 16,
+    width: "100%",
+    maxWidth: "100%",
+  },
+  heroTitleWide: {
+    fontSize: 44,
+    lineHeight: 50,
+    letterSpacing: -1.3,
+  },
+  heroTitleCompact: {
+    fontSize: 38,
+    lineHeight: 44,
+    letterSpacing: -1,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    textAlign: "left",
+    color: colors.textSecondary,
+    maxWidth: 480,
+    width: "100%",
+    fontSize: 16,
+    lineHeight: 25,
+  },
+  motifContainer: {
+    paddingVertical: 12,
+    marginBottom: 28,
+  },
+  motifContainerWide: {
+    flex: 1,
+    marginBottom: 0,
   },
   actionCard: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 650,
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderDefault,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     padding: spacing.lg,
-    marginBottom: 28,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
   buttonStack: {
     gap: 12,
-    marginTop: 14,
-    marginBottom: 10,
+    marginTop: 16,
+    marginBottom: 12,
   },
   toggleConfig: {
     flexDirection: "row",
@@ -421,49 +355,70 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     paddingVertical: 8,
+    marginTop: 4,
   },
   toggleConfigText: {
     fontSize: 12,
     color: colors.textMuted,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   configArea: {
     marginTop: 8,
-    paddingTop: 8,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
   },
-  featuresRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
+  storySection: {
+    marginTop: 52,
+    paddingTop: 28,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderDefault,
   },
-  featureItem: {
-    flex: 1,
-    minWidth: 180,
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-  },
-  featureIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
+  storyKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
     marginBottom: 10,
   },
-  featureTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.textPrimary,
-    marginBottom: 4,
+  storyTitle: {
+    ...typography.h2,
+    fontSize: 30,
+    lineHeight: 38,
+    maxWidth: 520,
+    marginBottom: 26,
   },
-  featureDesc: {
-    fontSize: 12,
+  steps: {
+    gap: 0,
+  },
+  stepsWide: {
+    flexDirection: "row",
+  },
+  stepItem: {
+    flex: 1,
+    paddingVertical: 18,
+    paddingRight: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  stepNumber: {
+    ...typography.code,
+    color: colors.accentTerracotta,
+    marginBottom: 16,
+  },
+  stepTitle: {
+    ...typography.h3,
+    marginBottom: 6,
+  },
+  stepCopy: {
+    ...typography.body,
+    maxWidth: 270,
+  },
+  useCases: {
+    ...typography.label,
     color: colors.textMuted,
-    lineHeight: 18,
+    marginTop: 28,
+    letterSpacing: 1.2,
+  },
+  useCaseDivider: {
+    color: colors.accentTerracotta,
   },
 });

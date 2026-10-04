@@ -28,7 +28,7 @@ export default function MeetingEndedScreen() {
   const minutes = Math.floor(durationSec / 60);
   const seconds = durationSec % 60;
   const durationFormatted =
-    minutes > 0 ? `${minutes} minutes ${seconds}s` : `${seconds} seconds`;
+    minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
   // Count distinct speakers
   const distinctSpeakerIds = new Set(
@@ -58,64 +58,46 @@ export default function MeetingEndedScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Badge (Section 34) */}
+        {/* Editorial Summary Header */}
         <View style={styles.badgeWrapper}>
-          <View style={styles.flagIconCircle}>
-            <Ionicons name="flag-outline" size={24} color={colors.primaryLight} />
-          </View>
-          <Text style={styles.endedTitle}>Meeting ended</Text>
+          <Text style={styles.kickerLabel}>CONVERSATION COMPLETED</Text>
+          <Text style={styles.endedTitle}>Summary & Record</Text>
           <Text style={styles.endedSubtitle}>
-            {sessionName || "Team Discussion"} · {sessionCode}
+            {sessionName || "Group Discussion"} · Meeting Code: {sessionCode}
           </Text>
         </View>
 
-        {/* Meeting Analytics Summary Cards Grid (Section 34) */}
+        {/* Metrics Grid */}
         <View style={styles.metricsGrid}>
           <View style={styles.metricCard}>
-            <Ionicons name="time-outline" size={20} color={colors.primaryLight} />
-            <Text style={styles.metricValue}>{durationFormatted}</Text>
             <Text style={styles.metricLabel}>DURATION</Text>
+            <Text style={styles.metricValue}>{durationFormatted}</Text>
           </View>
 
           <View style={styles.metricCard}>
-            <Ionicons name="people-outline" size={20} color="#0EA5E9" />
-            <Text style={styles.metricValue}>{roster.length} participants</Text>
-            <Text style={styles.metricLabel}>ATTENDEES</Text>
+            <Text style={styles.metricLabel}>PARTICIPANTS</Text>
+            <Text style={styles.metricValue}>{roster.length}</Text>
           </View>
 
           <View style={styles.metricCard}>
-            <Ionicons name="document-text-outline" size={20} color="#10B981" />
-            <Text style={styles.metricValue}>{Math.max(captions.length, 11)}</Text>
-            <Text style={styles.metricLabel}>CAPTION LINES</Text>
+            <Text style={styles.metricLabel}>TRANSCRIPT LINES</Text>
+            <Text style={styles.metricValue}>{captions.length}</Text>
           </View>
 
           <View style={styles.metricCard}>
-            <Ionicons name="mic-outline" size={20} color="#F97316" />
-            <Text style={styles.metricValue}>{speakersDetectedCount}</Text>
             <Text style={styles.metricLabel}>SPEAKERS IDENTIFIED</Text>
+            <Text style={styles.metricValue}>{speakersDetectedCount}</Text>
           </View>
         </View>
 
-        {/* Quality & Audio Fusion Summary */}
-        <View style={styles.qualityCard}>
-          <View style={styles.qualityRow}>
-            <Ionicons name="shield-checkmark" size={18} color={colors.success} />
-            <Text style={styles.qualityTitle}>Coordinated Acoustic Array Preserved</Text>
-          </View>
-          <Text style={styles.qualityDesc}>
-            All audio frames were fused and speaker-attributed across connected
-            client devices. Full subtitle transcript is archived.
-          </Text>
-        </View>
-
-        {/* Primary Action Buttons (Section 34) */}
+        {/* Action Buttons */}
         <View style={styles.actionStack}>
           {recordedAudioUrl && (
             <Button
-              title="Play Recorded Meeting Audio"
+              title="Play Recorded Session Audio"
               variant="secondary"
               size="lg"
-              icon={<Ionicons name="play-circle-outline" size={18} color={colors.primaryLight} />}
+              icon={<Ionicons name="play-circle-outline" size={18} color={colors.textPrimary} />}
               onPress={() => {
                 if (typeof Audio !== "undefined") {
                   const audio = new Audio(recordedAudioUrl);
@@ -127,25 +109,25 @@ export default function MeetingEndedScreen() {
           )}
 
           <Button
-            title="View / Export Transcript"
+            title="Export Live Transcript"
             variant="primary"
             size="lg"
-            icon={<Ionicons name="download-outline" size={18} color="#FFFFFF" />}
+            icon={<Ionicons name="download-outline" size={18} color="#FBF9F5" />}
             onPress={() => setExportOpen(true)}
             style={styles.btnFull}
           />
 
           <Button
-            title="Start New Meeting"
+            title="Start New Conversation"
             variant="secondary"
             size="lg"
-            icon={<Ionicons name="add-circle-outline" size={18} color={colors.textPrimary} />}
+            icon={<Ionicons name="add" size={18} color={colors.textPrimary} />}
             onPress={handleStartNew}
             style={styles.btnFull}
           />
 
           <Button
-            title="Return Home"
+            title="Return to Home"
             variant="ghost"
             size="md"
             onPress={handleReturnHome}
@@ -163,88 +145,67 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgPrimary,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
     paddingBottom: 48,
-    maxWidth: 620,
+    maxWidth: 580,
     width: "100%",
     alignSelf: "center",
   },
   badgeWrapper: {
-    alignItems: "center",
-    marginBottom: 28,
+    alignItems: "flex-start",
+    marginBottom: 32,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
-  flagIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "rgba(99, 102, 241, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.35)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+  kickerLabel: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 6,
   },
   endedTitle: {
-    ...typography.h2,
-    textAlign: "center",
+    ...typography.display1,
+    textAlign: "left",
     marginBottom: 6,
   },
   endedSubtitle: {
     ...typography.body,
-    color: colors.textMuted,
-    textAlign: "center",
+    color: colors.textSecondary,
+    textAlign: "left",
   },
   metricsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 32,
   },
   metricCard: {
     flex: 1,
-    minWidth: 130,
+    minWidth: 124,
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     borderRadius: radii.lg,
     padding: spacing.md,
-    alignItems: "center",
-  },
-  metricValue: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: colors.textPrimary,
-    marginVertical: 4,
-    textAlign: "center",
+    alignItems: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
   metricLabel: {
     ...typography.label,
-    fontSize: 10,
-  },
-  qualityCard: {
-    backgroundColor: "rgba(16, 185, 129, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)",
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: 24,
-  },
-  qualityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    fontSize: 9,
+    color: colors.textMuted,
     marginBottom: 4,
   },
-  qualityTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.success,
-  },
-  qualityDesc: {
-    fontSize: 12,
-    color: colors.textMuted,
-    lineHeight: 18,
+  metricValue: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
   },
   actionStack: {
     gap: 12,

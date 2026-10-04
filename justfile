@@ -31,6 +31,7 @@ test:
     npm.cmd --workspace=app test
     cd server; python -m uv run --extra dev pytest
 
-# Run integration test with simulated clients
+# Run integration test with simulated audio clients against the real pipeline
 fake-clients devices="3":
     cd server; python -m uv run python scripts/fake_client.py --devices {{devices}}
+

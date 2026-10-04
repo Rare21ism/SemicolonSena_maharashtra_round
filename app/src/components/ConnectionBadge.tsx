@@ -5,15 +5,9 @@ import { ConnectionStatus } from "../net/ws";
 
 interface ConnectionBadgeProps {
   status: ConnectionStatus;
-  rttMs?: number;
-  offsetMs?: number;
 }
 
-export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({
-  status,
-  rttMs,
-  offsetMs,
-}) => {
+export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({ status }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -23,12 +17,12 @@ export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({
         Animated.sequence([
           Animated.timing(pulseAnim, {
             toValue: 0.3,
-            duration: 500,
+            duration: 600,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 500,
+            duration: 600,
             useNativeDriver: true,
           }),
         ])
@@ -55,13 +49,13 @@ export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({
   const getStatusLabel = () => {
     switch (status) {
       case "connected":
-        return "LIVE";
+        return "Connected";
       case "connecting":
-        return "CONNECTING";
+        return "Connecting…";
       case "reconnecting":
-        return "RECONNECTING";
+        return "Getting you back in…";
       default:
-        return "OFFLINE";
+        return "Lost connection";
     }
   };
 
@@ -78,14 +72,6 @@ export const ConnectionBadge: React.FC<ConnectionBadgeProps> = ({
       <Text style={[styles.statusText, { color: dotColor }]}>
         {getStatusLabel()}
       </Text>
-      {status === "connected" && typeof rttMs === "number" && rttMs > 0 && (
-        <Text style={styles.metricsText}>
-          {Math.round(rttMs)}ms
-          {typeof offsetMs === "number" && Math.abs(offsetMs) > 0
-            ? ` · Δ${Math.round(offsetMs)}ms`
-            : ""}
-        </Text>
-      )}
     </View>
   );
 };
@@ -94,28 +80,29 @@ const styles = StyleSheet.create({
   badgeContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(13, 19, 34, 0.85)",
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     borderRadius: radii.full,
     paddingHorizontal: 10,
     paddingVertical: 4,
     gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   statusText: {
     fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-  metricsText: {
-    fontSize: 10,
-    color: colors.textMuted,
-    fontFamily: "monospace",
-    marginLeft: 2,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
 });
+
+

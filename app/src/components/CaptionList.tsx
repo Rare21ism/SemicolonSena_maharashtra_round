@@ -16,6 +16,7 @@ interface CaptionListProps {
   roster: DeviceInfo[];
   activeSpeakerId?: number | null;
   overlappingCount?: number;
+  micLevel?: number;
 }
 
 interface CaptionCluster {
@@ -31,13 +32,14 @@ export const CaptionList: React.FC<CaptionListProps> = ({
   roster,
   activeSpeakerId,
   overlappingCount = 0,
+  micLevel = 0,
 }) => {
   const flatListRef = useRef<FlatList>(null);
 
   const speakerMap = new Map<number, DeviceInfo>();
   roster.forEach((dev) => speakerMap.set(dev.device_idx, dev));
 
-  // Intelligently group consecutive caption lines by the same speaker (Section 17)
+  // Intelligently group consecutive caption lines by the same speaker
   const clusters: CaptionCluster[] = [];
   captions.forEach((cap, index) => {
     const speakerInfo =
@@ -65,12 +67,12 @@ export const CaptionList: React.FC<CaptionListProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Overlapping speech alert banner (Section 23) */}
+      {/* Overlapping speech alert banner */}
       {overlappingCount > 1 && (
         <View style={styles.overlapBanner}>
           <View style={styles.overlapDot} />
           <Text style={styles.overlapBannerText}>
-            2 speakers talking · Overlapping speech separated
+            Multiple people speaking simultaneously
           </Text>
         </View>
       )}
@@ -79,16 +81,17 @@ export const CaptionList: React.FC<CaptionListProps> = ({
         <View style={styles.emptyContainer}>
           <View style={styles.waveformBox}>
             <AudioWaveform
-              isActive={true}
-              height={44}
+              isActive={micLevel >= 0.01}
+              height={32}
               barCount={24}
-              color={colors.primary}
+              color={colors.primaryLight}
+              level={micLevel}
             />
           </View>
-          <Text style={styles.emptyTitle}>Roundtable is listening...</Text>
+          <Text style={styles.emptyKicker}>THE CONVERSATION</Text>
+          <Text style={styles.emptyTitle}>Waiting for speech</Text>
           <Text style={styles.emptySubtitle}>
-            Speak naturally. Live subtitles will stream here with automatic
-            speaker identification.
+            Speak naturally. Spoken words will flow into this transcript as people talk around the table.
           </Text>
         </View>
       ) : (
@@ -122,33 +125,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     position: "relative",
+    backgroundColor: colors.bgPrimary,
   },
   overlapBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(239, 68, 68, 0.18)",
+    backgroundColor: colors.dangerBg,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(239, 68, 68, 0.35)",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    borderBottomColor: "rgba(168, 50, 50, 0.2)",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     gap: 8,
   },
   overlapDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.danger,
   },
   overlapBannerText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FCA5A5",
-    letterSpacing: 0.2,
+    color: colors.danger,
+    letterSpacing: 0.5,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: 48,
+    paddingHorizontal: 28,
+    paddingVertical: 24,
+    paddingBottom: 72,
+    maxWidth: 780,
+    width: "100%",
+    alignSelf: "center",
   },
   emptyContainer: {
     flex: 1,
@@ -158,23 +165,34 @@ const styles = StyleSheet.create({
   },
   waveformBox: {
     marginBottom: 20,
-    padding: 16,
-    backgroundColor: "rgba(99, 102, 241, 0.08)",
-    borderRadius: radii.xl,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    backgroundColor: colors.bgCard,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.2)",
+    borderColor: colors.borderDefault,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  emptyKicker: {
+    ...typography.label,
+    color: colors.primaryLight,
+    marginBottom: 8,
   },
   emptyTitle: {
-    ...typography.h3,
+    ...typography.h1,
     color: colors.textPrimary,
     marginBottom: 8,
     textAlign: "center",
   },
   emptySubtitle: {
     ...typography.body,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     textAlign: "center",
     maxWidth: 420,
-    lineHeight: 22,
+    lineHeight: 23,
   },
 });

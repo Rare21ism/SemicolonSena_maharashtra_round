@@ -2,23 +2,36 @@
 Unit tests for session creation, device join, and REST/WebSocket endpoints.
 """
 
+import asyncio
 import pytest
 from starlette.testclient import TestClient
 
 from roundtable.main import app
-from roundtable.sessions import Session
 import numpy as np
 from roundtable.protocol import pack_audio_frame
 
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setenv("ROUNDTABLE_PIPELINE", "mock")
+    from roundtable.ml import pipeline as ml_pipeline
+
+    class TestPipeline:
+        async def on_frame(self, session_id, device_idx, seq, capture_ts_ms, pcm):
+            pass
+
+        async def captions(self):
+            while True:
+                await asyncio.Event().wait()
+                yield None
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(ml_pipeline, "RealPipeline", TestPipeline)
     return TestClient(app)
 
 
 def test_real_pipeline_initialization_failure_does_not_fall_back(client, monkeypatch):
-    monkeypatch.setenv("ROUNDTABLE_PIPELINE", "real")
     from roundtable.ml import pipeline as ml_pipeline
 
     def fail_initialization():
@@ -27,13 +40,7 @@ def test_real_pipeline_initialization_failure_does_not_fall_back(client, monkeyp
     monkeypatch.setattr(ml_pipeline, "RealPipeline", fail_initialization)
     response = client.post("/sessions")
     assert response.status_code == 503
-    assert "no mock pipeline was started" in response.json()["detail"]
-
-
-def test_unknown_pipeline_mode_is_rejected(monkeypatch):
-    monkeypatch.setenv("ROUNDTABLE_PIPELINE", "typo")
-    with pytest.raises(ValueError, match="ROUNDTABLE_PIPELINE"):
-        Session("test-session", "TESTXX")
+    assert "Real ML pipeline failed to initialize" in response.json()["detail"]
 
 
 def test_health_endpoint(client):

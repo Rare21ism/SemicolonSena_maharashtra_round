@@ -64,7 +64,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
   const [sessionCode, setSessionCode] = useState<string>("");
   const [sessionName, setSessionName] = useState<string>("Team Discussion");
   const [isHost, setIsHost] = useState<boolean>(false);
-  const [name, setName] = useState<string>("Participant");
+  const [name, setName] = useState<string>("");
   const [serverUrl, setServerUrl] = useState<string>(DEFAULT_SERVER_URL);
   const [myDeviceIdx, setMyDeviceIdx] = useState<number | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
@@ -216,6 +216,15 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
       const audioSource = createAudioSource();
       audioSourceRef.current = audioSource;
       audioSource.onChunk((pcm, ts) => {
+        let sumSquares = 0;
+        for (let i = 0; i < pcm.length; i++) {
+          const sample = pcm[i] / 32768;
+          sumSquares += sample * sample;
+        }
+        const rms = Math.sqrt(sumSquares / Math.max(1, pcm.length));
+        const level = Math.min(1, rms * 4);
+        setMicLevel(level);
+        setMicQuality(level >= 0.12 ? "good" : level >= 0.025 ? "fair" : "poor");
         if (!isMutedRef.current) {
           client.sendAudioFrame(pcm, ts);
         }
@@ -235,6 +244,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
       audioSourceRef.current.stop();
       audioSourceRef.current = null;
     }
+    setMicLevel(0);
+    setMicQuality("poor");
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;

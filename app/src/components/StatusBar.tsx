@@ -1,113 +1,88 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import {
-  Animated,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radii, spacing } from "../theme";
+import { colors, radii } from "../theme";
 
 interface StatusBarProps {
   isListening?: boolean;
   participantCount: number;
-  myDeviceIdx?: number | null;
   onOpenRoster?: () => void;
-  audioSyncStatus?: string;
   isMuted?: boolean;
+  micLevel?: number;
   onToggleMute?: () => void;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
   isListening = true,
   participantCount,
-  myDeviceIdx,
   onOpenRoster,
-  audioSyncStatus = "Audio synchronized",
   isMuted = false,
+  micLevel = 0,
   onToggleMute,
 }) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    let anim: Animated.CompositeAnimation | null = null;
-    if (isListening && !isMuted) {
-      anim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 0.3,
-            duration: 900,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 900,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      anim.start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-    return () => anim?.stop();
-  }, [isListening, isMuted, pulseAnim]);
+  const voiceDetected = micLevel >= 0.025;
 
   return (
     <View style={styles.container}>
-      {/* Listening & Mic State */}
+      {/* Mic toggle & Listening indicator */}
       <View style={styles.leftSection}>
         <TouchableOpacity
-          style={styles.micBtn}
+          style={[styles.micBtn, isMuted && styles.micBtnMuted]}
           onPress={onToggleMute}
           activeOpacity={0.7}
+          accessibilityLabel={isMuted ? "Unmute microphone" : "Mute microphone"}
         >
           <Ionicons
             name={isMuted ? "mic-off" : "mic"}
             size={16}
             color={isMuted ? colors.danger : colors.success}
           />
+          <Text style={[styles.micBtnText, isMuted && styles.micTextMuted]}>
+            {isMuted ? "Microphone off" : "Mute"}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.listeningWrap}>
-          <Animated.View
+          <View
             style={[
               styles.pulseDot,
               {
-                backgroundColor: isMuted ? colors.danger : colors.success,
-                opacity: isMuted ? 1 : pulseAnim,
+                backgroundColor: isMuted
+                  ? colors.danger
+                  : voiceDetected
+                    ? colors.success
+                    : colors.textDim,
               },
             ]}
           />
           <Text style={styles.listeningText}>
-            {isMuted ? "Mic muted" : "Listening · 16 kHz"}
+            {isMuted
+              ? "Microphone muted"
+              : voiceDetected
+                ? "Voice detected"
+                : isListening
+                  ? "Listening"
+                  : "Connecting"}
           </Text>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.syncWrap}>
-          <Ionicons name="git-commit-outline" size={13} color={colors.primaryLight} />
-          <Text style={styles.syncText}>{audioSyncStatus}</Text>
         </View>
       </View>
 
-      {/* Right: Roster trigger & Device idx */}
+      {/* Right: Participant toggle */}
       <View style={styles.rightSection}>
-        {myDeviceIdx !== null && myDeviceIdx !== undefined && (
-          <View style={styles.deviceBadge}>
-            <Text style={styles.deviceText}>Device #{myDeviceIdx}</Text>
-          </View>
-        )}
-
         <TouchableOpacity
           style={styles.rosterBtn}
           onPress={onOpenRoster}
           activeOpacity={0.7}
         >
-          <Ionicons name="people-outline" size={15} color={colors.textSecondary} />
-          <Text style={styles.rosterBtnText}>{participantCount}</Text>
+          <Ionicons name="people-outline" size={16} color={colors.textSecondary} />
+          <Text style={styles.rosterBtnText}>
+            {participantCount} {participantCount === 1 ? "person" : "people"}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -116,24 +91,48 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    height: 48,
+    height: 54,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: colors.bgCard,
     borderTopWidth: 1,
     borderTopColor: colors.borderDefault,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 3,
   },
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 16,
   },
   micBtn: {
-    padding: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: radii.sm,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: "rgba(43, 97, 64, 0.2)",
+  },
+  micBtnMuted: {
+    backgroundColor: colors.dangerBg,
+    borderColor: "rgba(168, 50, 50, 0.2)",
+  },
+  micBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.success,
+    letterSpacing: 0.5,
+  },
+  micTextMuted: {
+    color: colors.danger,
   },
   listeningWrap: {
     flexDirection: "row",
@@ -141,53 +140,27 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pulseDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   listeningText: {
     fontSize: 12,
     fontWeight: "600",
     color: colors.textSecondary,
   },
-  divider: {
-    width: 1,
-    height: 14,
-    backgroundColor: colors.borderDefault,
-  },
-  syncWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  syncText: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-  deviceBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: radii.sm,
-  },
-  deviceText: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontFamily: "monospace",
   },
   rosterBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: colors.bgCard,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: radii.md,
+    gap: 6,
+    backgroundColor: colors.bgSecondary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
@@ -197,3 +170,5 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
 });
+
+

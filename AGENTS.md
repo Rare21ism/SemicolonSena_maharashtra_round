@@ -16,7 +16,7 @@ Hackathon project, 24h. Phones/laptops = one ad-hoc mic array. Clients stream 16
 - TS types and Pydantic models must stay identical. Update both or neither.
 
 ## Rules
-- Mock-first: everything must work with ROUNDTABLE_PIPELINE=mock. ML code is behind the Pipeline interface in server/roundtable/pipeline/base.py and must never block the event loop (run model inference in a thread/executor or separate process).
+- Production sessions always use the real pipeline. Never emit synthetic captions or add a mock user-facing pipeline. ML code is behind the Pipeline interface in server/roundtable/pipeline/base.py and must never block the event loop (run model inference in a thread/executor or separate process).
 - Never introduce Expo Go-incompatible native modules in shared code paths without telling the team; web must keep working.
 - Platform-specific code goes in *.web.ts / *.native.ts files, not Platform.OS branches scattered in UI.
 - Keep ML deps in the server "ml" optional group. Don't add heavy deps to default install.
@@ -26,7 +26,7 @@ Hackathon project, 24h. Phones/laptops = one ad-hoc mic array. Clients stream 16
 
 ## Commands
 just dev-server | just dev-app | just dev-web | just tunnel | just test
-Server: :8000. Env: EXPO_PUBLIC_SERVER_URL, ROUNDTABLE_PIPELINE=mock|real.
+Server: :8000. Env: EXPO_PUBLIC_SERVER_URL, ROUNDTABLE_GATING=on|off.
 
 ## Latency targets
 Draft caption < ~500 ms from speech, final < ~2 s. Log per-stage latency per platform.

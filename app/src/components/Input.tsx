@@ -63,7 +63,10 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.label,
-    marginBottom: spacing.xs,
+    marginBottom: 6,
+    color: colors.textSecondary,
+    fontSize: 10,
+    letterSpacing: 1.5,
   },
   inputWrapper: {
     flexDirection: "row",
@@ -74,13 +77,15 @@ const styles = StyleSheet.create({
     borderColor: colors.borderDefault,
     paddingHorizontal: 14,
     height: 48,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   inputFocused: {
     borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    borderWidth: 1.5,
   },
   inputError: {
     borderColor: colors.danger,
@@ -89,6 +94,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.textPrimary,
     fontSize: 15,
+    fontWeight: "500",
     paddingVertical: 10,
   },
   iconContainer: {
@@ -109,3 +115,4 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 });
+

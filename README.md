@@ -9,7 +9,7 @@ Roundtable turns every participant's phone and laptop into a synchronized microp
 Get the end-to-end loop running in seconds:
 
 ```bash
-# 1. Install dependencies and the optional real ML stack
+# 1. Install dependencies and download the real speech models
 npm install; cd server; uv sync --extra dev --extra ml; uv run python scripts/download_models.py; cd ..
 
 # 2. Start the FastAPI backend server (port 8000)
@@ -19,20 +19,7 @@ just dev-server
 just dev-web
 ```
 
-Open `http://localhost:8081`, create a session, allow microphone access, and speak during the five-second sample. Real ASR requires the optional ML dependencies and model files installed above. Session creation reports an error if the real model pipeline cannot initialize; it never switches to mock captions.
-
-For developer-only synthetic client testing, explicitly start the backend in mock mode:
-
-```powershell
-$env:ROUNDTABLE_PIPELINE = "mock"
-just dev-server
-```
-
-Then run the fake clients in another terminal:
-
-```bash
-just fake-clients 3
-```
+Open `http://localhost:8081`, create a session, allow microphone access, and speak. `just dev-server` uses the real ASR pipeline by default. It reports an error if the optional ML packages or model files are unavailable; it never shows fabricated captions.
 
 ---
 
@@ -89,10 +76,9 @@ roundtable/
 │   │   ├── ws.py         # WebSocket handler & audio frame dispatcher
 │   │   ├── sessions.py   # In-memory session registry & broadcast coordinator
 │   │   ├── protocol.py   # Pydantic models & 20-byte binary frame pack/unpack
-│   │   ├── pipeline/     # ML Pipeline interfaces & MockPipeline
+│   │   ├── pipeline/     # Real ML pipeline interface
 │   │   └── ml/           # [ML OWNER WORKS HERE ONLY] Real model integration
 │   └── scripts/
-│       └── fake_client.py # Multi-device synthetic audio integration test runner
 ├── eval/                 # Offline evaluation datasets, WER benchmarks, and runners
 ├── justfile              # Cross-platform developer task recipes
 └── AGENTS.md             # Team agent instructions
