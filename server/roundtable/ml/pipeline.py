@@ -6,11 +6,20 @@ energy tracking, SNR-based gating, and shared Whisper correction.
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from collections import deque
+from collections import Counter
+from difflib import SequenceMatcher
+import json
 import logging
 import os
+from functools import partial
 from pathlib import Path
+import re
 import time
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Callable, Optional
+import urllib.parse
+import uuid
 import wave
 import numpy as np
 
@@ -21,6 +30,199 @@ from roundtable.ml.lane import CaptionEvent, Lane, PipelineLatencyStats, Whisper
 from roundtable.protocol import CaptionMessage
 
 logger = logging.getLogger("roundtable.ml.pipeline")
+
+
+class SessionStream:
+    def __init__(self, api_key: str, emit: Callable[[CaptionEvent], object], connector=None):
+        self.api_key = api_key
+        self.emit = emit
+        self.connector = connector
+        self.websocket = None
+        self.reader_task = None
+        self.failed = False
+        self.pending: list[tuple[float, np.ndarray, tuple[float, Optional[int], Optional[float], bool]]] = []
+        self.tick_log: list[tuple[float, Optional[int], Optional[float], bool]] = []
+        self.stream_start_ms: Optional[float] = None
+        self.current_selected_device: Optional[int] = None
+        self.no_selected_ms = 0.0
+        self.line_id: Optional[str] = None
+        self.line_rev = 0
+        self.line_speaker: Optional[int] = None
+        self.line_started_perf = 0.0
+        self._close_lock = asyncio.Lock()
+
+    async def _open(self, stream_start_ms: float) -> None:
+        if self.connector is None:
+            from websockets.asyncio.client import connect
+            connector = connect
+        else:
+            connector = self.connector
+        names_path = Path(__file__).resolve().parents[2] / "models" / "names.txt"
+        names = names_path.read_text(encoding="utf-8").splitlines() if names_path.exists() else []
+        params = {
+            "model": "nova-3", "language": "en-IN", "encoding": "linear16",
+            "sample_rate": "16000", "channels": "1", "interim_results": "true",
+            "endpointing": "300", "smart_format": "true", "punctuate": "true",
+        }
+        for name in names:
+            if name.strip():
+                params.setdefault("keyterm", []).append(name.strip())
+        url = "wss://api.deepgram.com/v1/listen?" + urllib.parse.urlencode(params, doseq=True)
+        try:
+            self.websocket = await connector(url, additional_headers={"Authorization": f"Token {self.api_key}"})
+        except Exception as exc:
+            if "en-IN" not in str(exc):
+                raise
+            params["language"] = "en"
+            url = "wss://api.deepgram.com/v1/listen?" + urllib.parse.urlencode(params, doseq=True)
+            self.websocket = await connector(url, additional_headers={"Authorization": f"Token {self.api_key}"})
+        self.stream_start_ms = stream_start_ms
+        self.tick_log = [tick for _, _, tick in self.pending]
+        self.failed = False
+        self.reader_task = asyncio.create_task(self._read_results())
+        logger.info("[Deepgram session] stream opened at session_ms=%.1f", stream_start_ms)
+        loop = asyncio.get_running_loop()
+        pcm = await loop.run_in_executor(None, np.concatenate, [chunk for _, chunk, _ in self.pending])
+        await self.websocket.send(pcm.astype(np.int16, copy=False).tobytes())
+        self.pending.clear()
+
+    async def feed_tick(
+        self,
+        pcm: np.ndarray,
+        session_ms: float,
+        selected_device: Optional[int],
+        snr_db: Optional[float],
+        runner_up_above: bool,
+    ) -> bool:
+        tick = (session_ms, selected_device, snr_db, runner_up_above)
+        logger.info("[Deepgram tick] session_ms=%.1f selected=%s snr=%s runner_up_above=%s", session_ms, selected_device, snr_db, runner_up_above)
+        if self.failed:
+            return False
+        self.current_selected_device = selected_device
+        if selected_device is None:
+            self.pending.clear()
+            if self.websocket:
+                try:
+                    self.tick_log.append(tick)
+                    self.no_selected_ms += len(pcm) / 16.0
+                    await self.websocket.send(np.zeros(len(pcm), dtype=np.int16).tobytes())
+                    if self.no_selected_ms >= 3000.0:
+                        await self._close_stream()
+                except Exception:
+                    logger.exception("[Deepgram session] send/close failed; switching to local ASR")
+                    await self._fail()
+                    return False
+            return True
+        self.no_selected_ms = 0.0
+        self.tick_log.append(tick)
+        if self.websocket is None:
+            self.pending.append((session_ms, pcm.copy(), tick))
+            if sum(len(chunk) for _, chunk, _ in self.pending) < 4800:
+                return True
+            try:
+                await self._open(self.pending[0][0])
+            except Exception:
+                logger.exception("[Deepgram session] open failed; switching to local ASR")
+                await self._fail()
+                return False
+            return True
+        try:
+            await self.websocket.send(pcm.astype(np.int16, copy=False).tobytes())
+            return True
+        except Exception:
+            logger.exception("[Deepgram session] send failed; switching to local ASR")
+            await self._fail()
+            return False
+
+    def _span_decision(self, start_ms: float, end_ms: float) -> tuple[Optional[int], float, list]:
+        ticks = [tick for tick in self.tick_log if start_ms <= tick[0] < end_ms]
+        if not ticks:
+            return self.current_selected_device, 0.0, ticks
+        counts = Counter(tick[1] for tick in ticks if tick[1] is not None)
+        if not counts:
+            return self.current_selected_device, sum(t[3] for t in ticks) / len(ticks), ticks
+        max_count = max(counts.values())
+        winners = [device for device, count in counts.items() if count == max_count]
+        winner = self.current_selected_device if self.current_selected_device in winners else winners[0]
+        return winner, sum(t[3] for t in ticks) / len(ticks), ticks
+
+    async def _handle_result(self, result: dict) -> None:
+        alternatives = result.get("channel", {}).get("alternatives", [])
+        text = alternatives[0].get("transcript", "").strip() if alternatives else ""
+        speech_final = bool(result.get("speech_final"))
+        start_ms = (self.stream_start_ms or 0.0) + float(result.get("start", 0.0)) * 1000.0
+        end_ms = start_ms + float(result.get("duration", 0.0)) * 1000.0
+        candidate, overlap_fraction, ticks = self._span_decision(start_ms, end_ms)
+        final = bool(result.get("is_final") or speech_final)
+        if text:
+            if self.line_id is None:
+                self.line_id = f"line-{uuid.uuid4().hex[:8]}"
+                self.line_rev = 0
+                self.line_speaker = candidate
+                self.line_started_perf = time.perf_counter()
+                logger.info("[Deepgram session] line=%s speaker=%s ticks=%s", self.line_id, candidate, len(ticks))
+            elif final and candidate is not None and candidate != self.line_speaker and ticks:
+                candidate_ticks = sum(tick[1] == candidate for tick in ticks)
+                if candidate_ticks / len(ticks) > 0.70:
+                    logger.info("[Deepgram session] line=%s speaker reassigned %s -> %s (%s/%s ticks)", self.line_id, self.line_speaker, candidate, candidate_ticks, len(ticks))
+                    self.line_speaker = candidate
+            self.line_rev += 1
+            await self.emit(CaptionEvent(
+                line_id=self.line_id,
+                rev=self.line_rev,
+                speaker_id=self.line_speaker if self.line_speaker is not None else (candidate or 0),
+                text=text,
+                state="final" if final else "draft",
+                t_start=start_ms,
+                t_end=end_ms,
+                overlap=True if overlap_fraction > 0.30 else None,
+            ))
+        if speech_final:
+            if self.line_id:
+                logger.info("[Deepgram session] end-of-speech-to-final_ms=%.1f line=%s", (time.perf_counter() - self.line_started_perf) * 1000.0, self.line_id)
+            self.line_id = None
+            self.line_rev = 0
+            self.line_speaker = None
+
+    async def _read_results(self) -> None:
+        try:
+            async for message in self.websocket:
+                await self._handle_result(json.loads(message))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[Deepgram session] receive failed; switching to local ASR")
+            self.failed = True
+
+    async def _fail(self) -> None:
+        self.failed = True
+        await self._close_stream()
+
+    async def _close_stream(self) -> None:
+        async with self._close_lock:
+            websocket, task = self.websocket, self.reader_task
+            if not websocket:
+                return
+            logger.info("[Deepgram session] stream closing at session_ms=%.1f", self.tick_log[-1][0] if self.tick_log else 0.0)
+            self.websocket = None
+            self.reader_task = None
+            try:
+                await websocket.send(json.dumps({"type": "CloseStream"}))
+                if task:
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=0.4)
+                    except (asyncio.TimeoutError, Exception):
+                        task.cancel()
+                await websocket.close()
+            except Exception:
+                logger.exception("[Deepgram session] close failed")
+            self.pending.clear()
+            self.tick_log.clear()
+            self.stream_start_ms = None
+            self.line_id = None
+
+    async def close(self) -> None:
+        await self._close_stream()
 
 
 class RealPipeline:
@@ -48,7 +250,18 @@ class RealPipeline:
     ):
         self._queue: asyncio.Queue[CaptionEvent] = asyncio.Queue()
         self._closed = False
+        self._caption_history: dict[str, dict] = {}
+        self._caption_snr: dict[int, deque[tuple[float, float]]] = {}
+        self._dedup_similarity = float(os.getenv("DEDUP_SIM", "0.5"))
         self.enable_whisper = enable_whisper
+        deepgram_key = os.getenv("DEEPGRAM_API_KEY")
+        self.asr_backend = os.getenv("ASR_BACKEND", "deepgram" if deepgram_key else "local").lower()
+        if self.asr_backend not in ("local", "deepgram", "deepgram_lanes"):
+            logger.warning("Unknown ASR_BACKEND=%s; using local", self.asr_backend)
+            self.asr_backend = "local"
+        if self.asr_backend.startswith("deepgram") and not deepgram_key:
+            logger.warning("DEEPGRAM_API_KEY missing; using local ASR")
+            self.asr_backend = "local"
 
         # Direct streaming is the reliable default for one active mic. Enable
         # adaptive multi-device gating explicitly once a room has calibrated its
@@ -57,9 +270,13 @@ class RealPipeline:
             self.enable_gating = enable_gating
         else:
             self.enable_gating = os.getenv("ROUNDTABLE_GATING", "off").lower() in ("on", "true", "1")
+        if self.asr_backend == "deepgram":
+            self.enable_gating = True
 
         self.draft_mode = (draft_mode or os.getenv("DRAFT_MODE", "whisper_rolling")).lower()
         self.gate_config = gate_config if gate_config is not None else GateConfig()
+        if self.asr_backend == "deepgram":
+            self.gate_config.overlap_mode = "single"
         self.stats = stats if stats is not None else PipelineLatencyStats()
 
         # Debug dumps: env ROUNDTABLE_DUMP_DIR
@@ -78,6 +295,7 @@ class RealPipeline:
         logger.info(
             f"Initializing RealPipeline (enable_whisper={enable_whisper}, enable_gating={self.enable_gating}, draft_mode={self.draft_mode})..."
         )
+        logger.info("[ASR Config] backend=%s DEEPGRAM_API_KEY=%s", self.asr_backend, "yes" if deepgram_key else "no")
         self.streaming_asr = streaming_asr or StreamingASR()
 
         rolling_model = os.getenv("ROLLING_MODEL", "base.en")
@@ -130,10 +348,93 @@ class RealPipeline:
         self.aligner = SessionAligner(hold_back_ms=self.gate_config.jitter_hold_back_ms)
         self.gate = AudioGate(config=self.gate_config)
         self._lock = asyncio.Lock()
+        self._ml_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pipeline-ml")
+        self.session_stream = SessionStream(deepgram_key, self._queue_caption) if self.asr_backend == "deepgram" and deepgram_key else None
+        self._deepgram_fallback_ticks: deque[tuple[int, np.ndarray, float, float, bool]] = deque()
 
     async def _emit_caption(self, caption: CaptionMessage) -> None:
+        if self._closed:
+            return
+        if self.asr_backend == "deepgram":
+            await self._queue_caption(caption)
+            return
+        await self._arbitrate_caption(caption)
+
+    async def _queue_caption(self, caption: CaptionMessage) -> None:
         if not self._closed:
             await self._queue.put(caption)
+
+    @staticmethod
+    def _caption_text_similarity(left: str, right: str) -> float:
+        left = re.sub(r"\W+", " ", left.lower()).strip()
+        right = re.sub(r"\W+", " ", right.lower()).strip()
+        if not left or not right:
+            return 0.0
+        if left in right or right in left:
+            return 1.0
+        return SequenceMatcher(None, left, right).ratio()
+
+    async def _clear_caption(self, record: dict) -> None:
+        previous = record["caption"]
+        if not record["draft_emitted"] or record.get("cleared"):
+            return
+        record["cleared"] = True
+        await self._queue_caption(CaptionEvent(
+            line_id=previous.line_id,
+            rev=int(previous.rev) + 1,
+            speaker_id=previous.speaker_id,
+            text="",
+            state="final",
+            t_start=previous.t_start,
+            t_end=previous.t_end,
+            overlap=getattr(previous, "overlap", None),
+        ))
+
+    async def _arbitrate_caption(self, caption: CaptionMessage) -> None:
+        start, end = float(caption.t_start), float(caption.t_end)
+        cutoff = end - 3000.0
+        for line_id, record in list(self._caption_history.items()):
+            if float(record["caption"].t_end) < cutoff:
+                del self._caption_history[line_id]
+        if not caption.text:
+            await self._queue_caption(caption)
+            return
+        lane = str(caption.speaker_id)
+        snr_samples = self._caption_snr.get(int(caption.speaker_id), ())
+        samples = [value for ts, value in snr_samples if start <= ts <= end]
+        mean_snr = sum(samples) / len(samples) if samples else 0.0
+        current = self._caption_history.get(caption.line_id)
+        if current:
+            current["caption"] = caption
+            current["mean_snr"] = mean_snr
+            current["draft_emitted"] |= caption.state == "draft"
+            await self._queue_caption(caption)
+            return
+
+        for other in list(self._caption_history.values()):
+            prior = other["caption"]
+            if str(prior.speaker_id) == lane or not prior.text:
+                continue
+            overlap_ms = min(end, float(prior.t_end)) - max(start, float(prior.t_start))
+            shorter = min(end - start, float(prior.t_end) - float(prior.t_start))
+            if shorter <= 0 or overlap_ms / shorter < 0.5:
+                continue
+            similarity = self._caption_text_similarity(caption.text, prior.text)
+            if similarity < self._dedup_similarity:
+                continue
+            if mean_snr <= other["mean_snr"]:
+                logger.info("[CaptionArbiter] suppressed lane=%s snr=%.2f text=%r against lane=%s snr=%.2f text=%r", lane, mean_snr, caption.text, prior.speaker_id, other["mean_snr"], prior.text)
+                return
+            logger.info("[CaptionArbiter] suppressed lane=%s snr=%.2f text=%r against lane=%s snr=%.2f text=%r", prior.speaker_id, other["mean_snr"], prior.text, lane, mean_snr, caption.text)
+            await self._clear_caption(other)
+
+        await self._queue_caption(caption)
+        self._caption_history[caption.line_id] = {
+            "caption": caption,
+            "mean_snr": mean_snr,
+            "draft_emitted": caption.state == "draft",
+            "cleared": False,
+        }
 
     def _get_or_create_lane(self, device_idx: int) -> Lane:
         if device_idx not in self.lanes:
@@ -146,6 +447,7 @@ class RealPipeline:
                 enable_whisper=self.enable_whisper,
                 draft_mode=self.draft_mode,
                 gate_open_threshold_db=self.gate_config.threshold_open_db,
+                asr_backend=self.asr_backend,
             )
             self.aligner.enroll_device(device_idx)
         return self.lanes[device_idx]
@@ -184,7 +486,11 @@ class RealPipeline:
                 st["frames_received"] += 1
                 st["total_samples"] += len(pcm)
                 st["last_wall_s"] = time.perf_counter()
-                max_abs = int(np.max(np.abs(pcm))) if len(pcm) > 0 else 0
+                if len(pcm) > 0:
+                    loop = asyncio.get_running_loop()
+                    max_abs = await loop.run_in_executor(self._ml_executor, lambda: int(np.max(np.abs(pcm))))
+                else:
+                    max_abs = 0
                 if max_abs > st["max_abs_sample"]:
                     st["max_abs_sample"] = max_abs
 
@@ -197,7 +503,10 @@ class RealPipeline:
                 return
 
             # Gating enabled: add frame to aligner and pop ready ticks
-            ready_ticks = self.aligner.add_frame(device_idx, capture_ts_ms, pcm)
+            loop = asyncio.get_running_loop()
+            ready_ticks = await loop.run_in_executor(
+                self._ml_executor, self.aligner.add_frame, device_idx, capture_ts_ms, pcm
+            )
             for tick in ready_ticks:
                 await self._process_gated_tick(tick)
 
@@ -212,13 +521,49 @@ class RealPipeline:
             if lane.has_active_utterance
         }
 
-        gated_result = self.gate.process_tick(
-            tick_idx=tick.tick_idx,
-            t_start_ms=tick.t_start_ms,
-            t_end_ms=tick.t_end_ms,
-            device_pcms=tick.device_pcms,
-            active_devices=active_devices,
+        loop = asyncio.get_running_loop()
+        gated_result = await loop.run_in_executor(
+            self._ml_executor,
+            partial(
+                self.gate.process_tick,
+                tick_idx=tick.tick_idx,
+                t_start_ms=tick.t_start_ms,
+                t_end_ms=tick.t_end_ms,
+                device_pcms=tick.device_pcms,
+                active_devices=active_devices,
+            ),
         )
+        for device_idx, metrics in gated_result.device_metrics.items():
+            history = self._caption_snr.setdefault(device_idx, deque())
+            history.append((tick.t_end_ms, metrics.snr_db))
+            while history and history[0][0] < tick.t_end_ms - 3000.0:
+                history.popleft()
+
+        if self.asr_backend == "deepgram" and self.session_stream is not None:
+            selected = gated_result.dominant_device
+            if selected is not None and not gated_result.device_open.get(selected, False):
+                selected = None
+            selected_snr = gated_result.device_metrics[selected].snr_db if selected is not None else None
+            runner_above = any(
+                dev != selected and metric.snr_db > self.gate_config.threshold_open_db
+                for dev, metric in gated_result.device_metrics.items()
+            )
+            silence = np.zeros_like(next(iter(tick.device_pcms.values())))
+            selected_pcm = gated_result.device_pcms[selected] if selected is not None else silence
+            if selected is not None:
+                self._deepgram_fallback_ticks.append((selected, selected_pcm.copy(), tick.t_start_ms, selected_snr or 0.0, gated_result.is_overlap))
+                while self._deepgram_fallback_ticks and self._deepgram_fallback_ticks[0][2] < tick.t_end_ms - 3000.0:
+                    self._deepgram_fallback_ticks.popleft()
+            if await self.session_stream.feed_tick(selected_pcm, tick.t_start_ms, selected, selected_snr, runner_above):
+                return
+            logger.warning("[Deepgram session] falling back to local backend")
+            self.asr_backend = "local"
+            for device_idx, pcm_chunk, start_ms, snr_db, overlap in self._deepgram_fallback_ticks:
+                await self.lanes[device_idx].feed(pcm_chunk, start_ms, overlap=overlap, snr_db=snr_db)
+            self._deepgram_fallback_ticks.clear()
+            await self.session_stream.close()
+            self.session_stream = None
+            return
 
         if self.dump_dir and self._csv_file and not self._csv_file.closed:
             for d, m in gated_result.device_metrics.items():
@@ -251,7 +596,7 @@ class RealPipeline:
                     await lane.feed(
                         pcm=pre_roll,
                         t_start_ms=tick.t_start_ms - pre_roll_dur_ms,
-                        overlap=gated_result.is_overlap,
+                        overlap=gated_result.is_overlap and gated_result.device_open.get(dev, False),
                         snr_db=snr_val,
                     )
 
@@ -262,7 +607,7 @@ class RealPipeline:
             await lane.feed(
                 pcm=pcm_out,
                 t_start_ms=tick.t_start_ms,
-                overlap=gated_result.is_overlap,
+                overlap=gated_result.is_overlap and gated_result.device_open.get(dev, False),
                 snr_db=snr_val,
             )
 
@@ -319,13 +664,16 @@ class RealPipeline:
         async with self._lock:
             if self.enable_gating:
                 # Flush remaining buffered ticks past jitter hold-back
-                remaining_ticks = self.aligner.flush()
+                loop = asyncio.get_running_loop()
+                remaining_ticks = await loop.run_in_executor(self._ml_executor, self.aligner.flush)
                 for tick in remaining_ticks:
                     await self._process_gated_tick(tick)
 
             # Flush all per-device lanes
             for lane in list(self.lanes.values()):
                 await lane.flush()
+            if self.session_stream:
+                await self.session_stream.close()
 
     async def close(self) -> None:
         """Closes all lanes, background workers, and resets aligner/gate."""
@@ -333,8 +681,11 @@ class RealPipeline:
         await self.flush()
         for lane in list(self.lanes.values()):
             lane.close()
+        if self.session_stream:
+            await self.session_stream.close()
         if self.whisper_queue:
             await self.whisper_queue.close()
         self.aligner.reset()
         self.gate.reset()
+        self._ml_executor.shutdown(wait=False)
         self._write_dumps()

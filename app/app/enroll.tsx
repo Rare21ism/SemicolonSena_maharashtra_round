@@ -115,7 +115,6 @@ export default function VoiceEnrollmentScreen() {
           recordedUriRef.current = recorder.uri;
         } catch {}
 
-        setCapturedFrameCount(50);
         setVoiceEnrolled(true);
         setState("captured");
         return;
