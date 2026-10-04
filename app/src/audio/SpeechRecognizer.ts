@@ -5,6 +5,7 @@
  */
 
 import { CaptionMessage } from "@roundtable/protocol";
+import { getMonotonicTimeMs } from "../utils/clock";
 
 export interface SpeechRecognizerOptions {
   speakerId: number | null;
@@ -72,7 +73,7 @@ export class BrowserSpeechRecognizer {
       };
 
       recognition.onresult = (event: any) => {
-        const now = Date.now();
+        const now = getMonotonicTimeMs();
         this.options.onSpeakingChange?.(true);
 
         if (this.silenceTimer) {
@@ -88,7 +89,7 @@ export class BrowserSpeechRecognizer {
           if (!transcript) continue;
 
           if (!this.currentLineId) {
-            this.currentLineId = `line-mic-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            this.currentLineId = `line-mic-${Math.floor(now)}-${Math.floor(Math.random() * 1000)}`;
             this.currentRev = 1;
             this.speechStartTime = now;
           }

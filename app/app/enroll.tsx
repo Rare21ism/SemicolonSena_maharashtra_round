@@ -64,7 +64,12 @@ export default function VoiceEnrollmentScreen() {
 
     let effectiveUrl = (serverUrl || "").trim().replace(/\/+$/, "");
     if (!effectiveUrl || (Platform.OS !== "web" && (effectiveUrl.includes("localhost") || effectiveUrl.includes("127.0.0.1")))) {
-      effectiveUrl = "http://192.168.1.3:8000";
+      effectiveUrl = (process.env.EXPO_PUBLIC_SERVER_URL || "").trim().replace(/\/+$/, "");
+    }
+    if (!effectiveUrl || (Platform.OS !== "web" && (effectiveUrl.includes("localhost") || effectiveUrl.includes("127.0.0.1")))) {
+      setCaptureError("Set the backend URL on the home screen to an address this device can reach. Start the backend with `just dev-server`.");
+      setState("idle");
+      return;
     }
 
     if (Platform.OS !== "web") {

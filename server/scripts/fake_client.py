@@ -87,10 +87,12 @@ async def run_device(
             joined_raw = await ws.recv()
             joined = json.loads(joined_raw)
             device_idx = joined.get("device_idx", device_num)
+            local_join_monotonic_ms = time.monotonic() * 1000.0
+            session_clock_offset_ms = joined["session_clock_ms"] - local_join_monotonic_ms
             print(f"[Device {device_num}] Joined as device_idx={device_idx}, token={joined.get('token')[:8]}...")
 
             # 2. Ping once to check latency
-            await ws.send(json.dumps({"type": "ping", "t0": time.time() * 1000.0}))
+            await ws.send(json.dumps({"type": "ping", "t0": time.monotonic() * 1000.0}))
 
             async def receiver():
                 """Listen for server messages (roster, captions, pongs)."""
@@ -109,7 +111,7 @@ async def run_device(
                                     f"[{state}] rev={rev} speaker={speaker} | \"{text}\" ({line_id})"
                                 )
                             elif msg_type == "pong":
-                                rtt = (time.time() * 1000.0) - msg.get("t0", 0.0)
+                                rtt = (time.monotonic() * 1000.0) - msg.get("t0", 0.0)
                                 print(f"[Device {device_num}] Pong received (RTT: {rtt:.1f}ms)")
                 except asyncio.CancelledError:
                     pass
@@ -142,7 +144,7 @@ async def run_device(
                 else:
                     pcm = generate_synthetic_pcm(seq=seq, device_idx=device_idx)
 
-                capture_ts_ms = time.time() * 1000.0
+                capture_ts_ms = time.monotonic() * 1000.0 + session_clock_offset_ms
                 frame_bytes = pack_audio_frame(
                     device_idx=device_idx,
                     seq=seq,

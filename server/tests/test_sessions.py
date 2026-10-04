@@ -125,3 +125,18 @@ def test_resume_token_is_session_scoped(client):
         ws.send_json({"type": "resume", "token": joined["token"], "last_seq": 0})
         with pytest.raises(Exception):
             ws.receive_json()
+
+
+def test_audio_frame_streaming_and_caption_receipt(client):
+    code = client.post("/sessions").json()["code"]
+    with client.websocket_connect(f"/ws/{code}") as ws:
+        ws.send_json({"type": "join", "name": "Mic 1", "platform": "web"})
+        joined = ws.receive_json()
+        ws.receive_json()  # roster
+        dev_idx = joined["device_idx"]
+        clock_ms = joined["session_clock_ms"]
+
+        for seq in range(10):
+            pcm = (np.sin(np.linspace(0, 50, 1600)) * 10000).astype(np.int16)
+            frame = pack_audio_frame(dev_idx, seq, clock_ms + seq * 100.0, pcm)
+            ws.send_bytes(frame)

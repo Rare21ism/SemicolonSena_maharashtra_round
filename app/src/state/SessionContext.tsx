@@ -63,7 +63,7 @@ interface SessionContextType {
   toastMessage: string | null;
   showToast: (msg: string) => void;
   clearToast: () => void;
-  connectToSession: (code: string, participantName: string) => void;
+  connectToSession: (code: string, participantName: string, startMicrophone?: boolean) => void;
   leaveSession: () => void;
   retryConnection: () => void;
   voiceEnrolled: boolean;
@@ -108,6 +108,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
   const clientRef = useRef<RoundtableClient | null>(null);
   const audioSourceRef = useRef<any>(null);
   const connectedCodeRef = useRef<string | null>(null);
+  const audioStartCodeRef = useRef<string | null>(null);
+  const transcriptSessionCodeRef = useRef<string | null>(null);
 
   const isMutedRef = useRef(isMuted);
   useEffect(() => {
@@ -131,6 +133,28 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsMuted((prev) => !prev);
   }, []);
 
+  const startAudioCapture = useCallback((client: RoundtableClient) => {
+    if (audioSourceRef.current) return;
+    const audioSource = createAudioSource();
+    audioSourceRef.current = audioSource;
+    audioSource.onChunk((pcm, ts) => {
+      let sumSquares = 0;
+      for (let i = 0; i < pcm.length; i++) {
+        const sample = pcm[i] / 32768;
+        sumSquares += sample * sample;
+      }
+      const level = Math.min(1, Math.sqrt(sumSquares / Math.max(1, pcm.length)) * 4);
+      setMicLevel(level);
+      setMicQuality(level >= 0.12 ? "good" : level >= 0.025 ? "fair" : "poor");
+      if (!isMutedRef.current) client.sendAudioFrame(pcm, ts);
+    });
+    audioSource.start().catch((error) => {
+      console.error("Audio capture could not start:", error);
+      if (audioSourceRef.current === audioSource) audioSourceRef.current = null;
+      showToast(error instanceof Error ? error.message : "Audio capture could not start.");
+    });
+  }, [showToast]);
+
   // Update caption or append
   const handleIncomingCaption = useCallback((caption: ExtendedCaptionMessage) => {
     setCaptions((prev) => updateCaptions(prev, caption));
@@ -142,12 +166,25 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const getEffectiveServerUrl = useCallback((url?: string): string => {
     let candidate = (url || serverUrl || "").trim().replace(/\/+$/, "");
+    // On a phone, localhost is the phone itself. For an HTTP page on the same
+    // LAN as the backend, use the host that served the page as the default.
+    if (Platform.OS === "web" && typeof window !== "undefined" &&
+        (candidate.includes("localhost") || candidate.includes("127.0.0.1"))) {
+      const { hostname, protocol } = window.location;
+      if (hostname && hostname !== "localhost" && hostname !== "127.0.0.1") {
+        if (protocol === "https:") {
+          throw new Error("This secure page cannot connect to a local HTTP server. Set the backend URL to its HTTPS tunnel address on the home screen.");
+        }
+        candidate = `http://${hostname}:8000`;
+        console.info("[Session] using page host for backend", candidate);
+      }
+    }
     if (!candidate || (Platform.OS !== "web" && (candidate.includes("localhost") || candidate.includes("127.0.0.1")))) {
       const detected = getDefaultServerUrl();
       if (detected && !detected.includes("localhost") && !detected.includes("127.0.0.1")) {
         return detected;
       }
-      return "http://192.168.1.3:8000";
+      throw new Error("Set the backend URL on the home screen to an address this device can reach (for example, your computer's Wi-Fi IP on port 8000). Start the backend with `just dev-server`.");
     }
     return candidate;
   }, [serverUrl]);
@@ -196,7 +233,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Connect to real WebSocket & Start live microphone speech-to-text
   const connectToSession = useCallback(
-    (code: string, participantName: string) => {
+    (code: string, participantName: string, startMicrophone = false) => {
+      if (transcriptSessionCodeRef.current !== code) {
+        transcriptSessionCodeRef.current = code;
+        setCaptions([]);
+        setActiveSpeakerId(null);
+        setRoster([]);
+      }
       setSessionCode(code);
       setName(participantName);
       setStartTimeMs(Date.now());
@@ -206,6 +249,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         connectedCodeRef.current === code &&
         clientRef.current.getStatus() === "connected"
       ) {
+        if (startMicrophone && !audioSourceRef.current && myDeviceIdxRef.current !== null) {
+          audioStartCodeRef.current = code;
+          startAudioCapture(clientRef.current);
+        }
         return;
       }
 
@@ -219,61 +266,69 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({
         audioSourceRef.current = null;
       }
 
-      const effectiveUrl = getEffectiveServerUrl();
+      let effectiveUrl: string;
+      try {
+        effectiveUrl = getEffectiveServerUrl();
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : String(error));
+        return;
+      }
 
       const client = new RoundtableClient({
         serverUrl: effectiveUrl,
         sessionId: code,
         name: participantName,
-        onStatusChange: (newStatus) => setStatus(newStatus),
+        onStatusChange: (newStatus) => {
+          if (clientRef.current === client) setStatus(newStatus);
+        },
         onJoined: (msg) => {
+          if (clientRef.current !== client) return;
           setMyDeviceIdx(msg.device_idx);
           myDeviceIdxRef.current = msg.device_idx;
           showToast(`Joined as device #${msg.device_idx}`);
+          if (audioStartCodeRef.current === code) {
+            startAudioCapture(client);
+          }
         },
         onClockSync: (offset, rtt) => {
+          if (clientRef.current !== client) return;
           setOffsetMs(offset);
           setRttMs(rtt);
         },
         onRoster: (devices) => {
+          if (clientRef.current !== client) return;
           setRoster(devices);
         },
         onCaption: (caption) => {
+          if (clientRef.current !== client) return;
           handleIncomingCaption(caption);
         },
       });
 
       clientRef.current = client;
+      // Audio capture is started by the explicit meeting action so Safari can
+      // resume its AudioContext while the browser still has a user gesture.
+      audioStartCodeRef.current = startMicrophone ? code : null;
+      if (startMicrophone) startAudioCapture(client);
       client.connect();
-
-      // Stream real 16 kHz PCM; caption recognition and speaker IDs come from the server pipeline.
-      const audioSource = createAudioSource();
-      audioSourceRef.current = audioSource;
-      audioSource.onChunk((pcm, ts) => {
-        let sumSquares = 0;
-        for (let i = 0; i < pcm.length; i++) {
-          const sample = pcm[i] / 32768;
-          sumSquares += sample * sample;
-        }
-        const rms = Math.sqrt(sumSquares / Math.max(1, pcm.length));
-        const level = Math.min(1, rms * 4);
-        setMicLevel(level);
-        setMicQuality(level >= 0.12 ? "good" : level >= 0.025 ? "fair" : "poor");
-        if (!isMutedRef.current) {
-          client.sendAudioFrame(pcm, ts);
-        }
-      });
-      audioSource.start().catch((e) => {
-        console.error("Audio capture could not start:", e);
-        showToast(e instanceof Error ? e.message : "Audio capture could not start.");
-      });
     },
-    [getEffectiveServerUrl, handleIncomingCaption, showToast]
+    [getEffectiveServerUrl, handleIncomingCaption, showToast, startAudioCapture]
   );
 
   // Leave session
   const leaveSession = useCallback(() => {
     connectedCodeRef.current = null;
+    transcriptSessionCodeRef.current = null;
+    audioStartCodeRef.current = null;
+    myDeviceIdxRef.current = null;
+    setMyDeviceIdx(null);
+    setRoster([]);
+    setCaptions([]);
+    setActiveSpeakerId(null);
+    setOverlappingCount(0);
+    setIsBackfilling(false);
+    setBackfillSeconds(0);
+    setStatus("disconnected");
     if (audioSourceRef.current) {
       audioSourceRef.current.stop();
       audioSourceRef.current = null;

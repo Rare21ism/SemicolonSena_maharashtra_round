@@ -81,7 +81,9 @@ class Session:
     def __init__(self, session_id: str, code: str):
         self.session_id = session_id
         self.code = code
-        self.created_at_ms = time.time() * 1000.0
+        # Session/audio timestamps use monotonic time; wall-clock time is only
+        # used for human-readable operational logs.
+        self.created_at_monotonic_ms = time.monotonic() * 1000.0
         self.devices: dict[int, DeviceSession] = {}
         self.tokens: dict[str, int] = {}  # token -> device_idx
         self._next_device_idx = 1
@@ -106,7 +108,7 @@ class Session:
 
     def get_session_clock_ms(self) -> float:
         """Returns session clock in milliseconds relative to session start."""
-        return time.time() * 1000.0 - self.created_at_ms
+        return time.monotonic() * 1000.0 - self.created_at_monotonic_ms
 
     def _start_caption_listener(self):
         async def loop():
@@ -253,6 +255,12 @@ class Session:
         device.has_seq = True
         device.frames_received += 1
         device.frame_arrivals.append(time.monotonic())
+        if device.frames_received == 1 or device.frames_received % 50 == 0:
+            capture_age_ms = self.get_session_clock_ms() - capture_ts_ms
+            logger.info(
+                "audio_frame_received session=%s device=%s seq=%s capture_ts_ms=%.3f samples=%s duration_ms=%.1f capture_age_ms=%.1f received_count=%s",
+                self.session_id, device_idx, seq, capture_ts_ms, len(pcm), len(pcm) / 16.0, capture_age_ms, device.frames_received,
+            )
         frame = type("QueuedFrame", (), {"seq": seq, "capture_ts_ms": capture_ts_ms, "pcm": pcm})()
         device.frames.append(frame)
         received_ms = received_ms or time.time() * 1000.0

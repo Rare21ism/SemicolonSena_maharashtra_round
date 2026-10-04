@@ -43,7 +43,7 @@ export default function MeetingLobbyScreen() {
   };
 
   const handleStartMeeting = () => {
-    connectToSession(sessionCode, name);
+    connectToSession(sessionCode, name, true);
     router.replace({
       pathname: "/live",
       params: { code: sessionCode, name },

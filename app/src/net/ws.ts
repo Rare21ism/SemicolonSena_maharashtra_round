@@ -14,6 +14,7 @@ import {
   packAudioFrame,
 } from "@roundtable/protocol";
 import { Platform as RNPlatform } from "react-native";
+import { getMonotonicTimeMs } from "../utils/clock";
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "reconnecting";
 
@@ -42,6 +43,7 @@ export class RoundtableClient {
   // that clock into the server's session clock once the join acknowledgement
   // gives us a shared anchor.
   private sessionClockOffsetMs = 0;
+  private sentFrames = 0;
 
   // Clock synchronization (NTP style)
   public clockOffsetMs = 0.0;
@@ -91,8 +93,8 @@ export class RoundtableClient {
       this.ws.binaryType = "arraybuffer";
 
       this.ws.onopen = () => {
+        console.info("[RoundtableClient] WebSocket open", wsUrl);
         this.reconnectAttempts = 0;
-        this.setStatus("connected");
 
         // Send Join message
         const joinMsg: ClientMessage = {
@@ -123,6 +125,7 @@ export class RoundtableClient {
       };
 
       this.ws.onclose = () => {
+        console.warn("[RoundtableClient] WebSocket closed; reconnecting", this.shouldReconnect);
         this.stopPingLoop();
         if (this.shouldReconnect) {
           this.setStatus("reconnecting");
@@ -139,19 +142,29 @@ export class RoundtableClient {
 
   private handleServerMessage(msg: ServerMessage) {
     switch (msg.type) {
-      case "joined":
+      case "joined": {
+        const localNow = getMonotonicTimeMs();
+        this.setStatus("connected");
         this.deviceIdx = msg.device_idx;
         this.token = msg.token;
-        this.sessionClockOffsetMs =
-          msg.session_clock_ms - (typeof performance !== "undefined" ? performance.now() : Date.now());
+        this.sessionClockOffsetMs = msg.session_clock_ms - localNow;
+        console.info("[RoundtableClient] joined", {
+          device: msg.device_idx,
+          sessionClockMs: msg.session_clock_ms,
+          localMonotonicMs: localNow,
+          sessionClockOffsetMs: this.sessionClockOffsetMs,
+        });
         this.options.onJoined?.(msg);
         break;
+      }
 
       case "pong": {
-        const now = Date.now();
+        const now = getMonotonicTimeMs();
         const rtt = Math.max(0, now - msg.t0);
-        // Estimated clock offset: server_time - client_time_at_midpoint
-        const offset = msg.server_ts_ms - (msg.t0 + rtt / 2.0);
+        // Both values are in the same monotonic session clock: server pong
+        // timestamp and local monotonic clock mapped at join.
+        const clientMidpointSessionMs = msg.t0 + rtt / 2.0 + this.sessionClockOffsetMs;
+        const offset = msg.server_ts_ms - clientMidpointSessionMs;
         this.rttMs = Math.round(rtt);
         this.clockOffsetMs = Math.round(offset);
         this.options.onClockSync?.(this.clockOffsetMs, this.rttMs);
@@ -163,6 +176,15 @@ export class RoundtableClient {
         break;
 
       case "caption":
+        console.info("[RoundtableClient] transcription response", {
+          line_id: msg.line_id,
+          rev: msg.rev,
+          state: msg.state,
+          speaker_id: msg.speaker_id,
+          text: msg.text,
+          t_start: msg.t_start,
+          t_end: msg.t_end,
+        });
         this.options.onCaption?.(msg);
         break;
     }
@@ -173,7 +195,7 @@ export class RoundtableClient {
     // Send ping every 2 seconds
     this.pingTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        const t0 = Date.now();
+        const t0 = getMonotonicTimeMs();
         const pingMsg: ClientMessage = { type: "ping", t0 };
         this.ws.send(JSON.stringify(pingMsg));
       }
@@ -220,6 +242,10 @@ export class RoundtableClient {
     });
 
     this.ws.send(frameBytes.buffer as ArrayBuffer);
+    this.sentFrames += 1;
+    if (this.sentFrames === 1 || this.sentFrames % 50 === 0) {
+      console.info("[RoundtableClient] audio frame sent", { seq: this.seq - 1, captureTsMs: captureTsMs + this.sessionClockOffsetMs, durationMs: pcm.length / 16, sampleCount: pcm.length, bufferedAmount: this.ws.bufferedAmount, state: this.ws.readyState });
+    }
   }
 
   public disconnect(): void {

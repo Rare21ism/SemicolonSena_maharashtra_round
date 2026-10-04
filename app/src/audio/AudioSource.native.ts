@@ -7,6 +7,7 @@ import {
 } from "expo-audio";
 import { File } from "expo-file-system";
 import { AudioSource } from "./AudioSource";
+import { getMonotonicTimeMs } from "../utils/clock";
 
 const SAMPLE_RATE = 16_000;
 const FRAME_SAMPLES = 1_600;
@@ -31,14 +32,21 @@ export class NativeAudioSource implements AudioSource {
   private stream: NativeStream | null = null;
   private subscription: { remove(): void } | null = null;
   private pending: number[] = [];
-  private pendingStartMs = 0;
   private isRunning = false;
   private activeRecorder: any = null;
   private recordInterval: any = null;
 
+  private _contextStartMs = 0;
+  private _totalOutputSamples = 0;
+  private _emittedFrames = 0;
+  private _encoding: "int16" | "float32" = "int16";
+
   async start(): Promise<void> {
     if (this.isRunning) return;
     this.isRunning = true;
+    this.pending = [];
+    this._totalOutputSamples = 0;
+    this._emittedFrames = 0;
 
     try {
       const permission = await requestRecordingPermissionsAsync();
@@ -47,49 +55,65 @@ export class NativeAudioSource implements AudioSource {
       }
 
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      // Anchor the frame sample counter after permission is granted, so a
+      // first-use permission prompt cannot make every frame appear stale.
+      this._contextStartMs = getMonotonicTimeMs();
 
       let stream: NativeStream | null = null;
       const AudioStreamClass = (AudioModule as any)?.AudioStream;
 
       if (AudioStreamClass) {
         try {
+          this._encoding = "int16";
           stream = new AudioStreamClass({
             sampleRate: SAMPLE_RATE,
             channels: 1,
-            encoding: "int16",
+            encoding: this._encoding,
           }) as NativeStream;
         } catch {
-          stream = null;
+          try {
+            this._encoding = "float32";
+            stream = new AudioStreamClass({
+              sampleRate: SAMPLE_RATE,
+              channels: 1,
+              encoding: this._encoding,
+            }) as NativeStream;
+          } catch {
+            stream = null;
+          }
         }
       }
 
       if (stream) {
         this.stream = stream;
-        this.pending = [];
         this.subscription = stream.addListener("audioStreamBuffer", (buffer) => {
           this.consumeBuffer(buffer);
         });
 
         try {
           await stream.start();
+          console.info("[NativeAudioSource] Streaming AudioStream started successfully.");
           return;
         } catch (error) {
           this.subscription?.remove();
           this.subscription = null;
           this.stream = null;
-          console.warn("AudioStream start failed, falling back to chunk recorder:", error);
+          console.warn("[NativeAudioSource] AudioStream start failed, falling back to chunk recorder:", error);
         }
       }
 
       // Fallback: Segmented WAV recorder for standard Expo Go
       await this.startChunkRecorder();
     } catch (error) {
-      this.isRunning = false;
+      this.stop();
       throw error;
     }
   }
 
   private async startChunkRecorder(): Promise<void> {
+    if (this._emittedFrames === 0) {
+      this._contextStartMs = getMonotonicTimeMs();
+    }
     const recordingOptions = {
       extension: ".wav",
       sampleRate: SAMPLE_RATE,
@@ -115,14 +139,11 @@ export class NativeAudioSource implements AudioSource {
       this.activeRecorder = recorder;
       await recorder.prepareToRecordAsync();
       recorder.record();
-      let segmentStartTs = performance.now();
 
       this.recordInterval = setInterval(async () => {
         if (!this.isRunning) return;
         const prevRecorder = this.activeRecorder;
-        const prevTs = segmentStartTs;
 
-        segmentStartTs = performance.now();
         try {
           const nextRecorder = new (AudioModule as any).AudioRecorder(recordingOptions);
           this.activeRecorder = nextRecorder;
@@ -137,9 +158,22 @@ export class NativeAudioSource implements AudioSource {
             await prevRecorder.stop();
             const uri = prevRecorder.uri;
             if (uri) {
-              const file = new File(uri);
-              const arrayBuffer = await file.arrayBuffer();
-              this.processWavBuffer(arrayBuffer, prevTs);
+              let arrayBuffer: ArrayBuffer | null = null;
+              try {
+                const file = new File(uri);
+                arrayBuffer = await file.arrayBuffer();
+              } catch (e1) {
+                try {
+                  const file = new File(uri);
+                  const bytes = await file.bytes();
+                  arrayBuffer = bytes.buffer as ArrayBuffer;
+                } catch (e2) {
+                  console.warn("[ChunkRecorder] File read error:", e1, e2);
+                }
+              }
+              if (arrayBuffer) {
+                this.processWavBuffer(arrayBuffer);
+              }
             }
           } catch (err) {
             console.warn("[ChunkRecorder] Buffer processing error:", err);
@@ -147,11 +181,12 @@ export class NativeAudioSource implements AudioSource {
         }
       }, 350);
     } catch (err) {
-      console.warn("Could not start continuous audio chunk recorder:", err);
+      this.isRunning = false;
+      throw new Error(`Could not start microphone audio streaming: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  private processWavBuffer(buffer: ArrayBuffer, captureTsMs: number): void {
+  private processWavBuffer(buffer: ArrayBuffer): void {
     if (!buffer || buffer.byteLength <= 44) return;
     const view = new DataView(buffer);
 
@@ -183,21 +218,11 @@ export class NativeAudioSource implements AudioSource {
     const sampleCount = Math.floor(byteLen / 2);
     const pcm = new Int16Array(buffer, pcmOffset, sampleCount);
 
-    if (this.pending.length === 0) {
-      this.pendingStartMs = captureTsMs;
-    }
     for (let i = 0; i < pcm.length; i++) {
       this.pending.push(pcm[i] / 32768.0);
     }
 
-    while (this.pending.length >= FRAME_SAMPLES) {
-      const frame = this.pending.splice(0, FRAME_SAMPLES);
-      const framePcm = Int16Array.from(frame, (sample) =>
-        Math.max(-32768, Math.min(32767, Math.round(sample * 32767)))
-      );
-      this.chunkCallback?.(framePcm, this.pendingStartMs);
-      this.pendingStartMs += (FRAME_SAMPLES / SAMPLE_RATE) * 1_000;
-    }
+    this.flushPending();
   }
 
   private consumeBuffer(buffer: {
@@ -206,24 +231,36 @@ export class NativeAudioSource implements AudioSource {
     channels: number;
     timestamp: number;
   }): void {
-    if (!this.stream || !buffer.data || buffer.data.byteLength === 0) return;
+    if (!buffer || !buffer.data || buffer.data.byteLength === 0) return;
 
     const numChannels = buffer.channels || 1;
     const actualSampleRate = buffer.sampleRate || SAMPLE_RATE;
 
-    if (buffer.data.byteLength % 2 !== 0) return;
-    const view = new DataView(buffer.data);
-    const source = new Float32Array(Math.floor(buffer.data.byteLength / 2));
-    for (let i = 0; i < source.length; i += 1) {
-      source[i] = view.getInt16(i * 2, true) / 32768;
-    }
-    const mono = new Float32Array(Math.floor(source.length / numChannels));
-    for (let i = 0; i < mono.length; i += 1) {
-      let sum = 0;
-      for (let channel = 0; channel < numChannels; channel += 1) {
-        sum += source[i * numChannels + channel];
+    let mono: Float32Array;
+
+    if (this._encoding === "int16" || buffer.data.byteLength % 4 !== 0) {
+      const sampleCount = Math.floor(buffer.data.byteLength / 2);
+      const view = new DataView(buffer.data);
+      const monoCount = Math.floor(sampleCount / numChannels);
+      mono = new Float32Array(monoCount);
+      for (let i = 0; i < monoCount; i++) {
+        let sum = 0;
+        for (let c = 0; c < numChannels; c++) {
+          sum += view.getInt16((i * numChannels + c) * 2, true) / 32768.0;
+        }
+        mono[i] = sum / numChannels;
       }
-      mono[i] = sum / numChannels;
+    } else {
+      const floatView = new Float32Array(buffer.data);
+      const monoCount = Math.floor(floatView.length / numChannels);
+      mono = new Float32Array(monoCount);
+      for (let i = 0; i < monoCount; i++) {
+        let sum = 0;
+        for (let c = 0; c < numChannels; c++) {
+          sum += floatView[i * numChannels + c];
+        }
+        mono[i] = sum / numChannels;
+      }
     }
 
     const ratio = actualSampleRate / SAMPLE_RATE;
@@ -237,18 +274,31 @@ export class NativeAudioSource implements AudioSource {
       resampled[i] = mono[left] * (1 - fraction) + mono[right] * fraction;
     }
 
-    if (this.pending.length === 0) {
-      this.pendingStartMs = performance.now() - (buffer.timestamp || 0) * 1_000;
-    }
     for (const sample of resampled) this.pending.push(sample);
+    this.flushPending();
+  }
 
+  private flushPending(): void {
     while (this.pending.length >= FRAME_SAMPLES) {
       const frame = this.pending.splice(0, FRAME_SAMPLES);
       const pcm = Int16Array.from(frame, (sample) =>
         Math.max(-32768, Math.min(32767, Math.round(sample * 32767)))
       );
-      this.chunkCallback?.(pcm, this.pendingStartMs);
-      this.pendingStartMs += (FRAME_SAMPLES / SAMPLE_RATE) * 1_000;
+      const captureTsMs =
+        this._contextStartMs + (this._totalOutputSamples / SAMPLE_RATE) * 1_000;
+      this._totalOutputSamples += FRAME_SAMPLES;
+      this._emittedFrames += 1;
+
+      if (this._emittedFrames === 1 || this._emittedFrames % 50 === 0) {
+        console.info("[NativeAudioSource] frame produced", {
+          seq: this._emittedFrames - 1,
+          captureTsMs,
+          durationMs: pcm.length / 16,
+          sampleCount: pcm.length,
+        });
+      }
+
+      this.chunkCallback?.(pcm, captureTsMs);
     }
   }
 
@@ -267,8 +317,14 @@ export class NativeAudioSource implements AudioSource {
     this.subscription = null;
     const stream = this.stream;
     this.stream = null;
-    stream?.stop();
+    try {
+      stream?.stop();
+    } catch {}
     this.pending = [];
+    this._contextStartMs = 0;
+    this._totalOutputSamples = 0;
+    this._emittedFrames = 0;
+    console.info("[NativeAudioSource] Native audio capture stopped");
   }
 
   onChunk(callback: (pcm: Int16Array, captureTsMs: number) => void): void {

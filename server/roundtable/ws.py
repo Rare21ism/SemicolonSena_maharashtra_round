@@ -90,7 +90,10 @@ async def handle_websocket(websocket: WebSocket, session_id: str):
                     parsed = PingMessage.model_validate(data)
                     if not math.isfinite(parsed.t0):
                         raise ValueError("Invalid ping timestamp")
-                    server_ts_ms = time.time() * 1000.0
+                    # Pair with the browser's performance.now() clock. The
+                    # session clock is monotonic and shares the joined anchor
+                    # used to timestamp audio frames.
+                    server_ts_ms = session.get_session_clock_ms()
                     await websocket.send_json({"type": "pong", "t0": parsed.t0, "server_ts_ms": server_ts_ms})
                 elif msg_type == "enroll":
                     if device is None:
