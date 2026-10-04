@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Web AudioSource — real microphone capture implementation.
  *
  * Audio pipeline:
@@ -63,19 +63,10 @@ export class WebAudioSource implements AudioSource {
     this._started = true;
     try {
 
-    // 1. Insecure context check — microphone requires HTTPS (or localhost).
-    if (typeof window !== 'undefined' && !window.isSecureContext) {
+    // 1. getUserMedia availability.
+    if (typeof navigator === "undefined" || !navigator?.mediaDevices?.getUserMedia) {
       throw new Error(
-        'Microphone requires a secure context (HTTPS or localhost). ' +
-        'Use the HTTPS tunnel (just tunnel) to test on a real device.'
-      );
-    }
-
-    // 2. getUserMedia availability.
-    if (!navigator?.mediaDevices?.getUserMedia) {
-      throw new Error(
-        'getUserMedia is not available in this browser. ' +
-        'Please use Chrome 74+, Firefox 69+, or Safari 14.5+.'
+        'getUserMedia is not available in this browser. If testing on mobile over Wi-Fi, run `just tunnel` to open via secure HTTPS.'
       );
     }
 
@@ -85,12 +76,7 @@ export class WebAudioSource implements AudioSource {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation:   false,
-          noiseSuppression:   false,
-          autoGainControl:    false,
-          channelCount:       1,
-        },
+        audio: true,
         video: false,
       });
     } catch (err: any) {

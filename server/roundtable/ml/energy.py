@@ -47,6 +47,10 @@ class DeviceMetrics:
     noise_floor_dbfs: float
     snr_db: float
 
+    @property
+    def dbfs(self) -> float:
+        return self.level_dbfs
+
 
 class DeviceEnergyTracker:
     """Tracks running noise floor and computes SNR for a single client device."""

@@ -99,19 +99,10 @@ def find_sherpa_files(sherpa_dir: Path) -> tuple[Path, Path, Path, Path]:
     return tokens, encoder, decoder, joiner
 
 
-def benchmark_sherpa_streaming(
-    audio: np.ndarray,
-    audio_duration: float,
-    sherpa_dir: Path,
-    device: str,
-    chunk_ms: int = 100,
-) -> dict:
-    """Benchmarks sherpa-onnx streaming recognizer with 100ms chunk feeds."""
+def get_sherpa_recognizer(sherpa_dir: Path, device: str):
     import sherpa_onnx
-
     tokens_path, enc_path, dec_path, join_path = find_sherpa_files(sherpa_dir)
     provider = "cuda" if device == "cuda" else "cpu"
-
     logger.info(f"Initializing Sherpa-ONNX OnlineRecognizer on {provider.upper()}...")
     t_init_start = time.perf_counter()
     recognizer = sherpa_onnx.OnlineRecognizer.from_transducer(
@@ -126,7 +117,29 @@ def benchmark_sherpa_streaming(
     )
     t_init = time.perf_counter() - t_init_start
     logger.info(f"Sherpa-ONNX model loaded in {t_init:.2f}s")
+    return recognizer, provider
 
+
+def get_whisper_model(whisper_dir: Path, model_name: str | None, device: str):
+    from faster_whisper import WhisperModel
+    compute_type = "float16" if device == "cuda" else "int8"
+    target = model_name or (str(whisper_dir) if whisper_dir.exists() else "small.en")
+    logger.info(f"Initializing Faster-Whisper '{target}' on {device.upper()} ({compute_type})...")
+    t_init_start = time.perf_counter()
+    model = WhisperModel(target, device=device, compute_type=compute_type)
+    t_init = time.perf_counter() - t_init_start
+    logger.info(f"Faster-Whisper model loaded in {t_init:.2f}s")
+    return model
+
+
+def benchmark_sherpa_streaming(
+    audio: np.ndarray,
+    audio_duration: float,
+    recognizer,
+    provider: str,
+    chunk_ms: int = 100,
+) -> dict:
+    """Benchmarks sherpa-onnx streaming recognizer with 100ms chunk feeds."""
     stream = recognizer.create_stream()
     chunk_samples = int(16000 * (chunk_ms / 1000.0))
 
@@ -136,7 +149,7 @@ def benchmark_sherpa_streaming(
     first_partial_text: str | None = None
     last_text = ""
 
-    total_chunks = (len(audio) + chunk_samples - 1) // chunk_samples
+    total_chunks = (len(audio) + chunk_samples - 1) // chunk_samples if chunk_samples > 0 else 0
 
     def extract_text(res) -> str:
         if isinstance(res, str):
@@ -173,7 +186,7 @@ def benchmark_sherpa_streaming(
     rtf = total_time / audio_duration if audio_duration > 0 else 0.0
 
     return {
-        "engine": "Sherpa-ONNX (Streaming Zipformer)",
+        "engine": "Sherpa-ONNX (Streaming)",
         "device": provider,
         "first_partial_time": first_partial_time or total_time,
         "first_partial_text": first_partial_text or final_text,
@@ -186,19 +199,10 @@ def benchmark_sherpa_streaming(
 def benchmark_whisper_batch(
     audio: np.ndarray,
     audio_duration: float,
-    whisper_dir: Path,
+    model,
     device: str,
 ) -> dict:
-    """Benchmarks faster-whisper small.en on the full audio clip."""
-    from faster_whisper import WhisperModel
-
-    compute_type = "float16" if device == "cuda" else "int8"
-    logger.info(f"\nInitializing Faster-Whisper '{whisper_dir.name}' on {device.upper()} ({compute_type})...")
-    t_init_start = time.perf_counter()
-    model = WhisperModel(str(whisper_dir), device=device, compute_type=compute_type)
-    t_init = time.perf_counter() - t_init_start
-    logger.info(f"Faster-Whisper model loaded in {t_init:.2f}s")
-
+    """Benchmarks faster-whisper on the full audio clip."""
     logger.info("--- Starting Faster-Whisper Transcription ---")
     start_time = time.perf_counter()
     segments, info = model.transcribe(
@@ -227,7 +231,7 @@ def benchmark_whisper_batch(
     rtf = total_time / audio_duration if audio_duration > 0 else 0.0
 
     return {
-        "engine": f"Faster-Whisper ({whisper_dir.name})",
+        "engine": "Faster-Whisper (Final)",
         "device": device,
         "first_partial_time": first_partial_time or total_time,
         "first_partial_text": first_partial_text or final_text,
@@ -238,67 +242,140 @@ def benchmark_whisper_batch(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Benchmark ASR engines on a WAV file")
-    parser.add_argument("wav", help="Path to input 16 kHz mono WAV file")
+    parser = argparse.ArgumentParser(description="Benchmark ASR engines on WAV file(s) or dumped audio directory")
+    parser.add_argument("wav", nargs="*", help="Path(s) to input 16 kHz mono WAV file(s) or dumped directory")
+    parser.add_argument("--dump-dir", type=Path, default=None, help="Directory containing dumped WAVs from ROUNDTABLE_DUMP_DIR")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto", help="Device to run inference on")
     parser.add_argument("--chunk-ms", type=int, default=100, help="Streaming chunk size in ms (default: 100)")
     parser.add_argument("--sherpa-dir", type=Path, default=DEFAULT_SHERPA_DIR, help="Path to sherpa-onnx model folder")
     parser.add_argument("--whisper-dir", type=Path, default=DEFAULT_WHISPER_DIR, help="Path to faster-whisper model folder")
+    parser.add_argument("--whisper-model", type=str, default=None, help="Whisper model name/path (e.g. base.en, small.en)")
     args = parser.parse_args()
 
-    wav_path = Path(args.wav)
-    if not wav_path.is_file():
-        logger.error(f"WAV file not found: {wav_path}")
+    # Collect wav files from args, --dump-dir, or ROUNDTABLE_DUMP_DIR
+    inputs = list(args.wav)
+    if args.dump_dir:
+        inputs.append(str(args.dump_dir))
+    if not inputs:
+        dump_env = os.environ.get("ROUNDTABLE_DUMP_DIR")
+        if dump_env:
+            inputs.append(dump_env)
+        else:
+            parser.error("Must specify at least one WAV file or directory, or set ROUNDTABLE_DUMP_DIR")
+
+    wav_files: list[Path] = []
+    for inp in inputs:
+        p = Path(inp)
+        if p.is_dir():
+            found = sorted(p.glob("*.wav"))
+            if not found:
+                logger.warning(f"No WAV files found in directory: {p}")
+            wav_files.extend(found)
+        elif p.is_file():
+            wav_files.append(p)
+        else:
+            logger.error(f"Input path not found: {p}")
+            sys.exit(1)
+
+    if not wav_files:
+        logger.error("No valid WAV files to benchmark.")
         sys.exit(1)
+
+    # De-duplicate while preserving order
+    unique_wavs = []
+    seen = set()
+    for w in wav_files:
+        res = w.resolve()
+        if res not in seen:
+            seen.add(res)
+            unique_wavs.append(w)
+    wav_files = unique_wavs
 
     device = auto_detect_device() if args.device == "auto" else args.device
     logger.info(f"Target device: {device.upper()} (specified: {args.device})")
+    logger.info(f"Benchmarking {len(wav_files)} audio file(s): {[w.name for w in wav_files]}")
 
-    # Load audio
-    audio, duration = load_audio(wav_path)
-    logger.info(f"Loaded audio: {wav_path.name} | Duration: {duration:.2f}s | Samples: {len(audio)}")
+    # Load models once
+    sherpa_recognizer, sherpa_provider = get_sherpa_recognizer(args.sherpa_dir, device)
+    whisper_model = get_whisper_model(args.whisper_dir, args.whisper_model, device)
 
-    # 1. Sherpa-ONNX streaming benchmark
-    sherpa_res = benchmark_sherpa_streaming(
-        audio=audio,
-        audio_duration=duration,
-        sherpa_dir=args.sherpa_dir,
-        device=device,
-        chunk_ms=args.chunk_ms,
-    )
+    results = []
 
-    # 2. Faster-Whisper batch benchmark
-    whisper_res = benchmark_whisper_batch(
-        audio=audio,
-        audio_duration=duration,
-        whisper_dir=args.whisper_dir,
-        device=device,
-    )
+    for wav_path in wav_files:
+        # Load audio
+        audio, duration = load_audio(wav_path)
+        logger.info(f"\n=======================================================")
+        logger.info(f"Loaded audio: {wav_path.name} | Duration: {duration:.2f}s | Samples: {len(audio)}")
+        logger.info(f"=======================================================")
 
-    # Summary table
-    print("\n" + "=" * 80)
-    print(f"ASR BENCHMARK RESULTS: {wav_path.name} ({duration:.2f}s audio on {device.upper()})")
-    print("=" * 80)
-    print(f"{'Engine':<36} | {'TTFP':<8} | {'Total':<8} | {'RTF':<8}")
-    print("-" * 80)
-    print(
-        f"{sherpa_res['engine']:<36} | "
-        f"{sherpa_res['first_partial_time']:6.3f}s | "
-        f"{sherpa_res['total_time']:6.3f}s | "
-        f"{sherpa_res['rtf']:6.3f}x"
-    )
-    print(
-        f"{whisper_res['engine']:<36} | "
-        f"{whisper_res['first_partial_time']:6.3f}s | "
-        f"{whisper_res['total_time']:6.3f}s | "
-        f"{whisper_res['rtf']:6.3f}x"
-    )
-    print("-" * 80)
-    print("\nTRANSCRIPTS:")
-    print(f"* Sherpa-ONNX (Streaming Draft):\n  \"{sherpa_res['final_text']}\"")
-    print(f"\n* Faster-Whisper (Final):\n  \"{whisper_res['final_text']}\"")
-    print("=" * 80 + "\n")
+        if len(audio) == 0 or duration < 0.01:
+            logger.warning(f"Audio file {wav_path.name} is empty or near zero duration. Skipping.")
+            continue
+
+        # 1. Sherpa-ONNX streaming benchmark
+        sherpa_res = benchmark_sherpa_streaming(
+            audio=audio,
+            audio_duration=duration,
+            recognizer=sherpa_recognizer,
+            provider=sherpa_provider,
+            chunk_ms=args.chunk_ms,
+        )
+
+        # 2. Faster-Whisper batch benchmark
+        whisper_res = benchmark_whisper_batch(
+            audio=audio,
+            audio_duration=duration,
+            model=whisper_model,
+            device=device,
+        )
+
+        results.append({
+            "name": wav_path.name,
+            "duration": duration,
+            "sherpa": sherpa_res,
+            "whisper": whisper_res,
+        })
+
+        # Per-file report
+        print("\n" + "=" * 80)
+        print(f"RESULTS: {wav_path.name} ({duration:.2f}s audio on {device.upper()})")
+        print("=" * 80)
+        print(f"{'Engine':<28} | {'TTFP':<8} | {'Total':<8} | {'RTF':<8}")
+        print("-" * 80)
+        print(
+            f"{sherpa_res['engine']:<28} | "
+            f"{sherpa_res['first_partial_time']:6.3f}s | "
+            f"{sherpa_res['total_time']:6.3f}s | "
+            f"{sherpa_res['rtf']:6.3f}x"
+        )
+        print(
+            f"{whisper_res['engine']:<28} | "
+            f"{whisper_res['first_partial_time']:6.3f}s | "
+            f"{whisper_res['total_time']:6.3f}s | "
+            f"{whisper_res['rtf']:6.3f}x"
+        )
+        print("-" * 80)
+        print(f"* Sherpa-ONNX (Draft/Final):\n  \"{sherpa_res['final_text']}\"")
+        print(f"* Faster-Whisper (Final):\n  \"{whisper_res['final_text']}\"")
+        print("=" * 80 + "\n")
+
+    # If multiple files, print summary table
+    if len(results) > 1:
+        print("\n" + "#" * 80)
+        print(f"OFFLINE REPLAY / MULTI-FILE BENCHMARK SUMMARY ({len(results)} files on {device.upper()})")
+        print("#" * 80)
+        print(f"{'File':<30} | {'Dur':<6} | {'Sherpa RTF':<11} | {'Whisper RTF':<12}")
+        print("-" * 80)
+        for r in results:
+            print(
+                f"{r['name']:<30} | "
+                f"{r['duration']:5.2f}s | "
+                f"{r['sherpa']['rtf']:6.3f}x     | "
+                f"{r['whisper']['rtf']:6.3f}x"
+            )
+        print("#" * 80 + "\n")
 
 
 if __name__ == "__main__":
     main()
+

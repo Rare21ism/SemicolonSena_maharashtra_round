@@ -142,3 +142,175 @@ def test_normalization_diff():
 
     # Meaningful text difference -> should normalize to different
     assert normalize_text("O THIS IS") != normalize_text("Hello this is")
+
+
+def test_whisper_prompt_names(tmp_path):
+    from roundtable.ml.engine import load_whisper_prompt
+    # Default prompt should include Laxman and teammate names
+    prompt = load_whisper_prompt()
+    assert "Laxman" in prompt
+    assert "Roundtable, ad hoc microphone array" in prompt
+    assert "Rajdeep" in prompt or "Antara" in prompt
+
+    # Custom names file
+    custom_names = tmp_path / "custom_names.txt"
+    custom_names.write_text("Alice\nBob\n", encoding="utf-8")
+    custom_prompt = load_whisper_prompt(custom_names)
+    assert custom_prompt == "Laxman, Alice, Bob, Roundtable, ad hoc microphone array"
+
+
+def test_hallucination_guard():
+    from roundtable.ml.lane import check_hallucination_or_drop
+
+    # Short speech < 400ms is dropped regardless of text
+    drop, reason = check_hallucination_or_drop("Hello everyone", duration_s=0.35, avg_snr_db=15.0, gate_open_threshold_db=6.0)
+    assert drop is True
+    assert "400 ms" in reason
+
+    # Valid speech >= 400ms is kept
+    drop, _ = check_hallucination_or_drop("Hello everyone", duration_s=0.5, avg_snr_db=15.0, gate_open_threshold_db=6.0)
+    assert drop is False
+
+    # Blocklist items:
+    # "Thank you." with duration < 1.5s should be dropped
+    drop, _ = check_hallucination_or_drop("Thank you.", duration_s=1.2, avg_snr_db=15.0, gate_open_threshold_db=6.0)
+    assert drop is True
+
+    # "Thanks for watching!" with duration < 1.5s should be dropped
+    drop, _ = check_hallucination_or_drop("Thanks for watching!", duration_s=1.0, avg_snr_db=15.0, gate_open_threshold_db=6.0)
+    assert drop is True
+
+    # "bye" with low SNR (< gate_open + 3 = 9.0) should be dropped even if duration is 1.6s
+    drop, _ = check_hallucination_or_drop("bye", duration_s=1.6, avg_snr_db=8.0, gate_open_threshold_db=6.0)
+    assert drop is True
+
+    # "you" with duration >= 1.5s and high SNR (>= gate_open + 3 = 9.0) is kept
+    drop, _ = check_hallucination_or_drop("you", duration_s=1.8, avg_snr_db=12.0, gate_open_threshold_db=6.0)
+    assert drop is False
+
+
+@pytest.mark.asyncio
+async def test_two_tier_models_and_backlog_promotion():
+    class MockASR:
+        def __init__(self, name):
+            self.name = name
+            self.calls = []
+
+        def transcribe(self, pcm):
+            self.calls.append(len(pcm))
+            return f"Transcribed by {self.name}"
+
+    rolling_asr = MockASR("rolling_base")
+    final_asr = MockASR("final_small")
+
+    emitted: list[CaptionMessage] = []
+    async def mock_emit(msg: CaptionMessage):
+        emitted.append(msg)
+
+    queue = WhisperCorrectionQueue(
+        rolling_asr=rolling_asr,
+        final_asr=final_asr,
+        emit_callback=mock_emit,
+    )
+
+    dummy_pcm = np.zeros(16000, dtype=np.int16)  # 1.0s
+
+    # Submit a draft job
+    draft_job = WhisperJob(
+        line_id="line-draft",
+        rev=1,
+        device_idx=0,
+        pcm_segment=dummy_pcm,
+        t_start_ms=0,
+        t_end_ms=1000,
+        sherpa_final_text="",
+        endpoint_timestamp=0,
+        endpoint_to_sherpa_ms=0,
+        queued_timestamp=0,
+        is_draft=True,
+    )
+    queue.submit(draft_job)
+
+    # Allow worker thread to process draft job
+    await asyncio.sleep(0.1)
+    assert len(rolling_asr.calls) == 1
+    assert len(final_asr.calls) == 0
+
+    # Submit a final job
+    final_job = WhisperJob(
+        line_id="line-final",
+        rev=2,
+        device_idx=0,
+        pcm_segment=dummy_pcm,
+        t_start_ms=0,
+        t_end_ms=1000,
+        sherpa_final_text="",
+        endpoint_timestamp=0,
+        endpoint_to_sherpa_ms=0,
+        queued_timestamp=0,
+        is_draft=False,
+    )
+    queue.submit(final_job)
+
+    await asyncio.sleep(0.1)
+    assert len(final_asr.calls) == 1
+
+    # Now test backlog promotion: artificially fill queue with dummy jobs
+    class SlowASR:
+        def transcribe(self, pcm):
+            import time
+            time.sleep(0.3)
+            return "slow result"
+
+    slow_queue = WhisperCorrectionQueue(
+        rolling_asr=SlowASR(),
+        final_asr=SlowASR(),
+        emit_callback=mock_emit,
+    )
+
+    slow_queue.record_last_rolling("l3", "promoted text")
+    # Submit 3 jobs rapidly to cause backlog > 1
+    slow_queue.submit(WhisperJob("l1", 1, 0, dummy_pcm, 0, 1000, "", 0, 0, 0, is_draft=False))
+    slow_queue.submit(WhisperJob("l2", 1, 0, dummy_pcm, 0, 1000, "", 0, 0, 0, is_draft=False))
+    slow_queue.submit(WhisperJob("l3", 1, 0, dummy_pcm, 0, 1000, "", 0, 0, 0, is_draft=False))
+
+    # The 3rd job should be skipped and promoted immediately
+    assert slow_queue.stats.whisper_skips_backlog > 0
+    # Check that promoted text was scheduled for emission
+    await asyncio.sleep(0.05)
+    promoted = [m for m in emitted if m.line_id == "l3" and m.state == "final"]
+    assert len(promoted) == 1
+    assert promoted[0].text == "promoted text"
+
+    await queue.close()
+    await slow_queue.close()
+
+
+@pytest.mark.asyncio
+async def test_lane_empty_draft_emission(streaming_asr):
+    emitted: list[CaptionMessage] = []
+    async def mock_emit(msg: CaptionMessage):
+        emitted.append(msg)
+
+    lane = Lane(
+        device_idx=1,
+        emit=mock_emit,
+        streaming_asr=streaming_asr,
+        enable_whisper=False,
+    )
+
+    # Feed 100ms of non-silent speech
+    t = np.linspace(0, 0.1, 1600, endpoint=False)
+    sine = (np.sin(2 * np.pi * 440 * t) * 15000).astype(np.int16)
+
+    await lane.feed(sine, t_start_ms=0.0)
+
+    # Initial draft should have been emitted with state="draft" and text=""
+    drafts = [m for m in emitted if m.state == "draft"]
+    assert len(drafts) >= 1
+    assert drafts[0].text == ""
+    assert drafts[0].speaker_id == 1
+
+    await lane.flush()
+    lane.close()
+
